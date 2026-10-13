@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="th" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบปรับเอกสาร บฑ.31</title>
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f3f5fa;
+  --bg-glow-1: rgba(79, 70, 229, .10);
+  --bg-glow-2: rgba(14, 165, 233, .10);
+  --card: #ffffff;
+  --card-soft: #f8f9fc;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #e4e8f1;
+  --primary: #4338ca;
+  --primary-2: #2563eb;
+  --primary-soft: #eef2ff;
+  --ok: #16a34a;
+  --ok-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --err: #dc2626;
+  --err-soft: #fee2e2;
+  --invite: #2563eb;
+  --invite-soft: #dbeafe;
+  --approve: #7c3aed;
+  --approve-soft: #ede9fe;
+  --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06);
+  --radius: 18px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1020; --bg-glow-1: rgba(99, 102, 241, .16); --bg-glow-2: rgba(14, 165, 233, .10);
+    --card: #121a2e; --card-soft: #0f172a; --text: #e5e9f5; --muted: #8b97b3; --line: #222c45;
+    --primary: #818cf8; --primary-2: #60a5fa; --primary-soft: #1e2347;
+    --ok: #4ade80; --ok-soft: #12321f; --warn: #fbbf24; --warn-soft: #3a2c0b; --err: #f87171; --err-soft: #3b1414;
+    --invite: #60a5fa; --invite-soft: #172a4d; --approve: #a78bfa; --approve-soft: #2a1f4d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1020; --bg-glow-1: rgba(99, 102, 241, .16); --bg-glow-2: rgba(14, 165, 233, .10);
+  --card: #121a2e; --card-soft: #0f172a; --text: #e5e9f5; --muted: #8b97b3; --line: #222c45;
+  --primary: #818cf8; --primary-2: #60a5fa; --primary-soft: #1e2347;
+  --ok: #4ade80; --ok-soft: #12321f; --warn: #fbbf24; --warn-soft: #3a2c0b; --err: #f87171; --err-soft: #3b1414;
+  --invite: #60a5fa; --invite-soft: #172a4d; --approve: #a78bfa; --approve-soft: #2a1f4d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+}
+
+:root { --bt31: #0d9488; --bt31-soft: #ccfbf1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bt31: #2dd4bf; --bt31-soft: #0f3a36; } }
+:root[data-theme="dark"] { --bt31: #2dd4bf; --bt31-soft: #0f3a36; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: "IBM Plex Sans Thai", "Leelawadee UI", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(900px 500px at 0% -10%, var(--bg-glow-1), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, var(--bg-glow-2), transparent 60%),
+    var(--bg);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+svg { flex: none; }
+.app { max-width: 1120px; margin: 0 auto; padding: 22px 24px 28px; }
+
+/* ---------- header ---------- */
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.app-icon { width: 46px; height: 46px; border-radius: 14px; box-shadow: 0 8px 20px -8px rgba(67, 56, 202, .6); }
+.title h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.title p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--line); color: var(--muted);
+}
+.icon-btn:hover { color: var(--text); }
+@media (max-width: 640px) { header { flex-wrap: wrap; } .header-right { margin-left: 0; width: 100%; } }
+
+/* ---------- layout ---------- */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+main { display: flex; flex-direction: column; gap: 20px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 12px;
+  font-weight: 500; font-size: 14px; white-space: nowrap; transition: background .15s, box-shadow .15s, border-color .15s;
+}
+.btn-soft { background: var(--primary-soft); color: var(--primary); }
+.btn-soft:hover { box-shadow: inset 0 0 0 1px var(--primary); }
+.btn-outline { border: 1px solid var(--line); background: var(--card); }
+.btn-outline:hover { border-color: var(--muted); }
+.badge-count {
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: 99px; display: inline-grid; place-items: center;
+  background: var(--primary); color: #fff; font-size: 12px; font-weight: 600;
+}
+
+/* ---------- slots ---------- */
+.slot { overflow: hidden; }
+.slot-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px 14px; }
+.slot-icon { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; flex: none; position: relative; }
+.slot-icon .num {
+  position: absolute; right: -6px; top: -6px; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; border: 2px solid var(--card);
+}
+.invite .slot-icon { background: var(--invite-soft); color: var(--invite); }
+.invite .slot-icon .num { background: var(--invite); }
+.approve .slot-icon { background: var(--approve-soft); color: var(--approve); }
+.approve .slot-icon .num { background: var(--approve); }
+.slot-head h2 { margin: 0; font-size: 16.5px; font-weight: 600; }
+.slot-head p { margin: 0; color: var(--muted); font-size: 13px; }
+
+.want {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--card-soft); cursor: pointer; user-select: none; font-size: 14px; font-weight: 500;
+  white-space: nowrap; transition: border-color .15s, background .15s; position: relative;
+}
+.want:hover { border-color: var(--approve); }
+.want input { position: absolute; opacity: 0; width: 0; height: 0; }
+.want .box {
+  width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--muted); display: grid; place-items: center;
+  color: transparent; transition: .15s; background: var(--card);
+}
+.want input:checked + .box { background: var(--approve); border-color: var(--approve); color: #fff; }
+.want input:focus-visible + .box { outline: 2px solid var(--approve); outline-offset: 2px; }
+.want:has(input:checked) { border-color: var(--approve); background: var(--approve-soft); color: var(--approve); }
+
+.zone {
+  margin: 0 20px 18px; padding: 18px; border: 2px dashed var(--line); border-radius: 14px; background: var(--card-soft);
+  display: flex; align-items: center; gap: 14px; transition: border-color .15s, transform .15s;
+}
+.zone .zi { color: var(--muted); }
+.zone .zt b { display: block; font-weight: 600; font-size: 14.5px; }
+.zone .zt span { color: var(--muted); font-size: 13px; }
+.zone .btn { margin-left: auto; }
+.invite .zone.over { border-color: var(--invite); transform: scale(1.005); }
+.approve .zone.over { border-color: var(--approve); transform: scale(1.005); }
+@media (max-width: 640px) {
+  .zone { flex-direction: column; text-align: center; } .zone .btn { margin: 0; }
+  .slot-head { flex-wrap: wrap; } .want { margin-left: 0; }
+}
+
+/* ช่องหนังสือขออนุมัติที่ยังไม่ติ๊ก: เทาและใช้ไม่ได้ (ยกเว้นช่องติ๊ก) */
+.slot.off .slot-icon, .slot.off .slot-head h2, .slot.off .slot-head p,
+.slot.off .zone, .slot.off .files { opacity: .45; filter: grayscale(1); }
+.slot.off .zone, .slot.off .files { pointer-events: none; user-select: none; }
+.off-note { margin: -6px 20px 16px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+
+/* ---------- mode tabs ---------- */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.tab { min-height: 46px; padding: 6px 10px; line-height: 1.3; text-align: center; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; font-size: 14.5px; color: var(--muted); transition: background .15s, color .15s; }
+.tab:hover { color: var(--text); }
+.tab.on { background: var(--primary-soft); color: var(--primary); }
+.tab[data-mode="bt31"].on { background: var(--bt31-soft); color: var(--bt31); }
+.bt31 .slot-icon { background: var(--bt31-soft); color: var(--bt31); }
+.bt31 .zone.over { border-color: var(--bt31); transform: scale(1.005); }
+.ficon.bt31, .sum .dot.bt31 { background: var(--bt31-soft); color: var(--bt31); }
+.steps { margin: -4px 20px 16px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); }
+.steps b { color: var(--bt31); font-weight: 700; margin-right: 4px; }
+.sub2 { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-btn .k { color: var(--muted); font-weight: 600; }
+
+/* ---------- ช่องกรอกข้อมูลภาษาอังกฤษ (คำร้อง บฑ.31 ภาษาอังกฤษ) ---------- */
+.enform { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-soft); display: grid; gap: 8px; }
+.enform-h { font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.enrow { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 2px 10px; align-items: center; }
+.enrow .l { font-size: 12.5px; font-weight: 600; }
+.enrow .th { grid-column: 2; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enrow input {
+  grid-column: 2; height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); font: inherit; font-size: 13.5px; min-width: 0;
+}
+.enrow input:focus { outline: 2px solid var(--bt31); outline-offset: -1px; border-color: transparent; }
+.enrow.need input { border-color: var(--warn); background: var(--warn-soft); }
+.enrow .l::after { content: ""; }
+.enrow.need .l::after { content: " *"; color: var(--warn); }
+@media (max-width: 640px) { .enrow { grid-template-columns: 1fr; } .enrow .th, .enrow input { grid-column: 1; } }
+
+/* ---------- file rows ---------- */
+.files { border-top: 1px solid var(--line); }
+.row {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 12px; align-items: center;
+  padding: 12px 20px; border-bottom: 1px solid var(--line);
+}
+.row.fresh { animation: in .25s ease; }
+/* หลายไฟล์ผลลัพธ์ (บฑ.31): ปุ่มขึ้นบรรทัดใหม่ใต้ชื่อไฟล์ */
+.row.multi { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.row.multi > .actions { grid-column: 2 / -1; flex-wrap: wrap; }
+.row:last-child { border-bottom: 0; }
+@keyframes in { from { opacity: 0; transform: translateY(4px); } }
+.ficon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; }
+.ficon.invite { background: var(--invite-soft); color: var(--invite); }
+.ficon.approve { background: var(--approve-soft); color: var(--approve); }
+.ficon.other { background: var(--card-soft); color: var(--muted); }
+.fname { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fname span.n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap; border: 1px solid transparent; }
+.lang.th { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.lang.en { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+:root[data-theme="dark"] .lang.th { background: #3b0a14; color: #fda4af; border-color: #5b1324; }
+:root[data-theme="dark"] .lang.en { background: #0b1f44; color: #93c5fd; border-color: #1e3a6b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .lang.th { background: #3b0a14; color: #fda4af; border-color: #5b1324; }
+  :root:not([data-theme="light"]) .lang.en { background: #0b1f44; color: #93c5fd; border-color: #1e3a6b; }
+}
+.preview { margin-top: 4px; font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 1px; }
+.preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview span::before { content: "→ "; color: var(--primary); font-weight: 700; }
+.fsub { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note { margin-top: 6px; font-size: 12.5px; color: var(--warn); background: var(--warn-soft); padding: 4px 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.note.err { color: var(--err); background: var(--err-soft); }
+.note button { font-weight: 600; text-decoration: underline; font-size: 12.5px; color: inherit; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 5px 11px; border-radius: 99px; white-space: nowrap; }
+.status.ready { background: var(--card-soft); color: var(--muted); border: 1px solid var(--line); }
+.status.busy { background: var(--primary-soft); color: var(--primary); }
+.status.done { background: var(--ok-soft); color: var(--ok); }
+.status.warn { background: var(--warn-soft); color: var(--warn); }
+.status.error { background: var(--err-soft); color: var(--err); }
+.actions { display: flex; gap: 6px; }
+.chip-btn {
+  height: 32px; padding: 0 11px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--card);
+}
+.chip-btn:hover { border-color: var(--primary); color: var(--primary); }
+.x-btn { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
+.x-btn:hover { background: var(--err-soft); color: var(--err); }
+@media (max-width: 640px) { .row { grid-template-columns: 40px minmax(0, 1fr); } .row > .status-wrap, .row > .actions { grid-column: 2; } }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- side ---------- */
+.side { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 20px; }
+.panel { padding: 20px; }
+.panel h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.opt { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; }
+.opt + .opt { border-top: 1px solid var(--line); }
+.opt .t { font-size: 14px; font-weight: 500; }
+.opt .d { font-size: 12.5px; color: var(--muted); }
+.switch { margin-left: auto; position: relative; width: 44px; height: 26px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: .2s; }
+.switch span::after {
+  content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: .2s;
+}
+.switch input:checked + span { background: linear-gradient(135deg, var(--primary), var(--primary-2)); }
+.switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.label { font-size: 13px; color: var(--muted); margin: 14px 0 8px; font-weight: 500; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--card-soft); border: 1px solid var(--line); border-radius: 12px; }
+.seg button { height: 34px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.seg button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+.dest-path { margin-top: 8px; font-size: 12.5px; color: var(--muted); word-break: break-all; display: flex; gap: 6px; align-items: flex-start; }
+
+.run-panel { padding: 20px; }
+.sum { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.sum > div { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted); }
+.sum .dot { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; }
+.sum .dot.invite { background: var(--invite-soft); color: var(--invite); }
+.sum .dot.approve { background: var(--approve-soft); color: var(--approve); }
+.sum b { margin-left: auto; color: var(--text); font-weight: 600; }
+.sum .dim .dot { filter: grayscale(1); opacity: .5; }
+.sum .dim b { color: var(--muted); font-weight: 500; }
+.primary {
+  width: 100%; height: 52px; border-radius: 14px; color: #fff; font-size: 16px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  box-shadow: 0 12px 24px -10px rgba(67, 56, 202, .7); transition: filter .15s, box-shadow .15s;
+}
+.primary:hover { filter: brightness(1.07); }
+.primary[disabled] { filter: grayscale(.6) opacity(.55); box-shadow: none; cursor: default; }
+.progress { height: 6px; border-radius: 99px; background: var(--card-soft); overflow: hidden; margin-top: 14px; display: none; }
+.progress.on { display: block; }
+.progress i { display: block; height: 100%; width: 40%; border-radius: 99px; background: linear-gradient(90deg, var(--primary), var(--primary-2)); animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.hint { margin-top: 12px; font-size: 12.5px; color: var(--muted); text-align: center; }
+.wide { width: 100%; justify-content: center; margin-top: 10px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  background: #0f172a; color: #fff; padding: 12px 18px; border-radius: 14px; font-size: 14px; z-index: 20;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .25); display: flex; gap: 10px; align-items: center; transition: .25s; max-width: calc(100% - 32px);
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img class="app-icon" src="/icon.png" alt="">
+    <div class="title">
+      <h1>ระบบปรับเอกสาร บฑ.31</h1>
+      <p>หนังสือเชิญ / หนังสือขออนุมัติอาจารย์พิเศษ (ไทย · English) → ไฟล์ Word รูปแบบมาตรฐาน</p>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-soft" id="dlBtn" title="ดึงไฟล์ Export ที่ดาวน์โหลดภายใน 3 วัน และจัดลงช่องให้อัตโนมัติ">
+        <span data-icon="download"></span>ไฟล์ใหม่ใน Downloads <span class="badge-count" id="dlCount" hidden>0</span>
+      </button>
+      <button class="icon-btn" id="themeBtn" title="สลับโหมดสว่าง/มืด" aria-label="สลับโหมดสว่าง/มืด"><span data-icon="moon"></span></button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <main>
+      <div class="tabs" role="tablist">
+        <button class="tab" data-mode="export" role="tab"><span data-icon="upload" data-size="18"></span>ไฟล์ Export จากระบบ (.doc)</button>
+        <button class="tab" data-mode="bt31" role="tab"><span data-icon="form" data-size="18"></span>สร้างจาก PDF ระบบ บฑ.31 (e-Form)</button>
+      </div>
+
+      <section class="card slot bt31" id="slot-bt31" data-mode-panel="bt31" hidden>
+        <div class="slot-head">
+          <div class="slot-icon"><span data-icon="form" data-size="24"></span></div>
+          <div>
+            <h2>PDF หน้า บฑ.31 คำร้องขอเชิญอาจารย์พิเศษ</h2>
+            <p>ระบบอ่านข้อมูลจากแบบฟอร์ม แล้วสร้างหนังสือเชิญให้ทันที</p>
+          </div>
+          <label class="want">
+            <input type="checkbox" id="wantApprove2">
+            <span class="box"><span data-icon="check" data-size="14"></span></span>
+            สร้างหนังสือขออนุมัติด้วย
+          </label>
+        </div>
+        <div class="steps"><span><b>1</b>เปิดหน้า บฑ.31 ในระบบ</span><span><b>2</b>กด Ctrl+P แล้วบันทึกเป็น PDF</span><span><b>3</b>ลากไฟล์ PDF มาวางด้านล่าง</span></div>
+        <div class="zone" data-zone="bt31">
+          <span class="zi" data-icon="upload" data-size="26"></span>
+          <div class="zt"><b>ลากไฟล์ PDF บฑ.31 มาวางที่นี่</b><span>ได้หนังสือเชิญ และหนังสือขออนุมัติ (ถ้าติ๊ก)</span></div>
+          <button class="btn btn-outline" data-pick="bt31"><span data-icon="plus"></span>เลือกไฟล์ PDF</button>
+        </div>
+        <div class="files" id="files-bt31" hidden></div>
+      </section>
+
+      <section class="card slot invite" id="slot-invite" data-mode-panel="export">
+        <div class="slot-head">
+          <div class="slot-icon"><span data-icon="invite" data-size="24"></span><span class="num">1</span></div>
+          <div>
+            <h2>หนังสือเชิญ</h2>
+            <p>ไฟล์ Export หนังสือเชิญเป็นอาจารย์พิเศษ — ภาษาไทยหรืออังกฤษ</p>
+          </div>
+        </div>
+        <div class="zone" data-zone="invite">
+          <span class="zi" data-icon="upload" data-size="26"></span>
+          <div class="zt"><b>ลากไฟล์หนังสือเชิญมาวางที่นี่</b><span>ไฟล์ .doc ที่ดาวน์โหลดจากระบบ</span></div>
+          <button class="btn btn-outline" data-pick="invite"><span data-icon="plus"></span>เลือกไฟล์</button>
+        </div>
+        <div class="files" id="files-invite" hidden></div>
+      </section>
+
+      <section class="card slot approve off" id="slot-approve" data-mode-panel="export">
+        <div class="slot-head">
+          <div class="slot-icon"><span data-icon="approve" data-size="24"></span><span class="num">2</span></div>
+          <div>
+            <h2>หนังสือขออนุมัติ</h2>
+            <p>ไฟล์ Export หนังสือขออนุมัติอาจารย์พิเศษ — ภาษาไทยหรืออังกฤษ</p>
+          </div>
+          <label class="want">
+            <input type="checkbox" id="wantApprove">
+            <span class="box"><span data-icon="check" data-size="14"></span></span>
+            ต้องการหนังสือขออนุมัติ
+          </label>
+        </div>
+        <div class="off-note" id="offNote"><span data-icon="info" data-size="14"></span>ติ๊ก “ต้องการหนังสือขออนุมัติ” เพื่อเปิดใช้ช่องนี้ · ถ้าไม่ติ๊ก หนังสือเชิญภาษาไทยจะตัดประโยค “ทั้งนี้ได้แจ้งให้ผู้บังคับบัญชาของท่านทราบแล้ว” ออก</div>
+        <div class="zone" data-zone="approve">
+          <span class="zi" data-icon="upload" data-size="26"></span>
+          <div class="zt"><b>ลากไฟล์หนังสือขออนุมัติมาวางที่นี่</b><span>ไฟล์ .doc ที่ดาวน์โหลดจากระบบ</span></div>
+          <button class="btn btn-outline" data-pick="approve"><span data-icon="plus"></span>เลือกไฟล์</button>
+        </div>
+        <div class="files" id="files-approve" hidden></div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <section class="card panel">
+        <h3>ตัวเลือก</h3>
+        <label class="opt">
+          <div><div class="t">สร้างไฟล์ PDF ด้วย</div><div class="d">ได้ทั้ง .docx และ .pdf</div></div>
+          <span class="switch"><input type="checkbox" id="optPdf"><span></span></span>
+        </label>
+        <div class="label">บันทึกไฟล์ที่</div>
+        <div class="seg">
+          <button id="destSame">ข้างไฟล์ต้นฉบับ</button>
+          <button id="destFolder">เลือกโฟลเดอร์…</button>
+        </div>
+        <div class="dest-path" id="destPath"></div>
+      </section>
+
+      <section class="card run-panel">
+        <div class="sum">
+          <div id="sumBt31Row" hidden><span class="dot bt31"><span data-icon="form" data-size="15"></span></span>PDF บฑ.31<b id="sumBt31">0 ไฟล์</b></div>
+          <div id="sumInviteRow"><span class="dot invite"><span data-icon="invite" data-size="15"></span></span>หนังสือเชิญ<b id="sumInvite">0 ไฟล์</b></div>
+          <div id="sumApproveRow"><span class="dot approve"><span data-icon="approve" data-size="15"></span></span>หนังสือขออนุมัติ<b id="sumApprove">ไม่ต้องการ</b></div>
+          <div id="sumLangRow" hidden><span class="dot" style="background:var(--card-soft);color:var(--muted)"><span data-icon="info" data-size="15"></span></span>ภาษาหนังสือ<b id="sumLang"></b></div>
+        </div>
+        <button class="primary" id="runBtn" disabled><span data-icon="sparkle" data-size="20"></span><span id="runLabel">ปรับเอกสาร</span></button>
+        <div class="progress" id="progress"><i></i></div>
+        <div class="hint" id="hint">ใช้ Microsoft Word ในเครื่องแปลงไฟล์</div>
+        <button class="btn btn-outline wide" id="folderBtn" hidden><span data-icon="folder"></span>เปิดโฟลเดอร์ผลลัพธ์</button>
+        <button class="btn btn-outline wide" id="clearBtn" hidden><span data-icon="refresh"></span>เริ่มชุดใหม่</button>
+      </section>
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = "{{TOKEN}}";
+const $ = (id) => document.getElementById(id);
+const state = { items: [], settings: {}, busy: false, lastOutput: "" };
+const SLOT_NAME = { invite: "หนังสือเชิญ", approve: "หนังสือขออนุมัติ" };
+const SHORT = { "หนังสือเชิญ": "เชิญ", "หนังสืออนุมัติ": "อนุมัติ" };
+
+// ---------- ชุดไอคอนเดียวทั้งหน้า (เส้น 2px มุมมน): เชิญ = ซองจดหมาย, ขออนุมัติ = เอกสารมีเครื่องหมายถูก ----------
+const P = {
+  invite: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+  approve: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  word: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m8 13 1.5 5 2.5-4 2.5 4 1.5-5"/>',
+  pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sparkle: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  form: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>',
+};
+const icon = (name, size = 16) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]}</svg>`;
+const SPIN = `<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>`;
+document.querySelectorAll("[data-icon]").forEach((el) => (el.outerHTML = icon(el.dataset.icon, +(el.dataset.size || 17))));
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let toastTimer;
+function toast(msg, ic = "check") {
+  const t = $("toast");
+  t.innerHTML = icon(ic, 16) + "<span>" + esc(msg) + "</span>";
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 3400);
+}
+
+const wantApprove = () => !!state.settings.want_approve;
+const THAI_RE = /[\u0e00-\u0e7f]/;
+const enValid = (v) => !!v && !THAI_RE.test(v) && !/\sin\s*$/.test(v);
+const enFields = (it) => (it.en_fields || []).filter((f) => f.key !== "approver" || wantApprove());
+const enReady = (it) => enFields(it).every((f) => enValid((it.en || {})[f.key]));
+const mode = () => state.settings.mode === "bt31" ? "bt31" : "export";
+// แปลงเฉพาะไฟล์ของโหมดที่เปิดอยู่ (ช่องหนังสือขออนุมัติต้องติ๊กก่อน)
+const active = (it) => it.slot === "bt31" ? mode() === "bt31" && enReady(it)
+  : mode() === "export" && (it.slot === "invite" || wantApprove());
+
+// slot: ช่องที่ผู้ใช้วางไฟล์ ถ้าไม่ระบุ จัดลงช่องตามประเภทที่อ่านได้จากไฟล์
+function addItems(list, slot) {
+  let added = 0, approveWhileOff = 0;
+  const addedSlots = new Set();
+  for (const it of list) {
+    if (state.items.some((x) => x.id === it.id)) continue;
+    const s = it.kind_code === "bt31" ? "bt31"
+      : slot && slot !== "bt31" ? slot : (it.kind_code === "approve" ? "approve" : "invite");
+    addedSlots.add(s);
+    if (s === "approve" && !wantApprove()) approveWhileOff++;
+    const en = Object.fromEntries((it.en_fields || []).map((f) => [f.key, f.value || ""]));
+    state.items.push({ ...it, en, slot: s, st: it.ok ? "ready" : "error", result: null, fresh: true });
+    added++;
+  }
+  const want = mode() === "bt31" ? ["bt31"] : ["invite", "approve"];
+  if (addedSlots.size && !want.some((x) => addedSlots.has(x))) {
+    saveSettings({ mode: addedSlots.has("bt31") ? "bt31" : "export" });   // สลับไปโหมดของไฟล์ที่เพิ่งเพิ่ม
+  }
+  render();
+  if (approveWhileOff && mode() === "export") toast("มีหนังสือขออนุมัติ — ติ๊ก “ต้องการหนังสือขออนุมัติ” เพื่อแปลงด้วย", "info");
+  else if (added) toast(`เพิ่ม ${added} ไฟล์`);
+  else if (list.length) toast("ไฟล์อยู่ในรายการแล้ว", "alert");
+}
+
+function statusHtml(it) {
+  if (it.st === "ready" && it.slot === "bt31" && !enReady(it)) return `<span class="status warn">${icon("alert", 15)}กรอกข้อมูล EN</span>`;
+  if (it.st === "busy") return `<span class="status busy">${SPIN}กำลังแปลง</span>`;
+  if (it.st === "done") return it.result.notes.length
+    ? `<span class="status warn">${icon("alert", 15)}เสร็จ มีหมายเหตุ</span>`
+    : `<span class="status done">${icon("check", 15)}เสร็จแล้ว</span>`;
+  if (it.st === "error") return `<span class="status error">${icon("alert", 15)}${it.result ? "ไม่สำเร็จ" : "ใช้ไม่ได้"}</span>`;
+  return `<span class="status ready">พร้อมแปลง</span>`;
+}
+
+function rowHtml(it) {
+  const k = ["approve", "invite", "bt31"].includes(it.kind_code) ? it.kind_code : "other";
+  const sub = k === "bt31" ? [it.to, it.summary].filter(Boolean).join(" · ")
+    : it.to ? (it.lang === "en" ? "Dear " : "เรียน ") + it.to : (it.folder || "");
+  const sub2 = k === "bt31" && it.ok ? (it.approver ? "ต้องขออนุมัติจาก " + it.approver : "ไม่ต้องขออนุมัติผู้บังคับบัญชา") : "";
+  // ชื่อไฟล์ที่จะได้ (ก่อนแปลง) — หนังสือขออนุมัติจาก บฑ.31 แสดงเมื่อติ๊กสร้างด้วย
+  const previews = it.st === "done" ? [] : (it.outputs_preview || [])
+    .filter((n) => k !== "bt31" || wantApprove() || !n.startsWith("หนังสือขออนุมัติ"));
+  const preview = it.ok && previews.length
+    ? `<div class="preview" title="ชื่อไฟล์ที่จะได้">${previews.map((n) => `<span>${esc(n)}.docx</span>`).join("")}</div>` : "";
+  const langPill = it.lang ? `<span class="lang ${it.lang}" title="${esc(it.lang_source || "")}">${esc(it.lang_label || it.lang.toUpperCase())}</span>` : "";
+  let notes = "";
+  if (it.st === "error") notes = `<div class="note err">${esc(it.result ? it.result.error : it.reason)}</div>`;
+  else if (it.result && it.result.notes.length) notes = it.result.notes.map((n) => `<div class="note">${esc(n)}</div>`).join("");
+  if (it.ok && k !== "other" && k !== it.slot && it.st !== "done") {
+    notes += `<div class="note">${icon("alert", 14)}ไฟล์นี้เป็น${SLOT_NAME[k]}<button data-move="${it.id}">ย้ายไปช่อง${SLOT_NAME[k]}</button></div>`;
+  }
+  let actions = "";
+  if (it.st === "done" && it.result.outputs) {
+    for (const o of it.result.outputs) {
+      const name = SHORT[o.kind] || o.kind.replace("หนังสือ", "");
+      if (o.docx) actions += `<button class="chip-btn" data-open="${esc(o.docx)}" title="${esc(o.kind)} (Word)">${icon("word", 15)}<span class="k">${esc(name)}</span>Word</button>`;
+      if (o.pdf) actions += `<button class="chip-btn" data-open="${esc(o.pdf)}" title="${esc(o.kind)} (PDF)">${icon("pdf", 15)}PDF</button>`;
+    }
+    if (it.result.docx) actions += `<button class="chip-btn" data-reveal="${esc(it.result.docx)}" title="แสดงในโฟลเดอร์" aria-label="แสดงในโฟลเดอร์">${icon("folder", 15)}</button>`;
+  } else if (it.st === "done") {
+    const r = it.result;
+    actions = `<button class="chip-btn" data-open="${esc(r.docx)}">${icon("word", 15)}Word</button>`
+      + (r.pdf ? `<button class="chip-btn" data-open="${esc(r.pdf)}">${icon("pdf", 15)}PDF</button>` : "")
+      + `<button class="chip-btn" data-reveal="${esc(r.docx)}" title="แสดงในโฟลเดอร์" aria-label="แสดงในโฟลเดอร์">${icon("folder", 15)}</button>`;
+  }
+  if (!state.busy) actions += `<button class="x-btn" data-remove="${it.id}" title="นำออก" aria-label="นำออก">${icon("x")}</button>`;
+  const multi = it.st === "done" && it.result.outputs && it.result.outputs.length > 0;
+  let form = "";
+  if (k === "bt31" && it.lang === "en" && it.ok && it.st !== "done" && it.st !== "busy") {
+    form = `<div class="enform"><div class="enform-h">${icon("info", 14)}ข้อมูลภาษาอังกฤษสำหรับหนังสือ — ตรวจ/กรอกช่องที่มี * (โปรแกรมจำไว้ใช้ครั้งต่อไป)</div>`
+      + enFields(it).map((f) => {
+        const v = it.en[f.key] || "";
+        return `<label class="enrow${enValid(v) ? "" : " need"}"><span class="l">${esc(f.label)}</span>`
+          + `<span class="th" title="${esc(f.th)}">${esc(f.th)}</span>`
+          + `<input data-en="${it.id}" data-key="${f.key}" value="${esc(v)}" placeholder="กรอกเป็นภาษาอังกฤษ" spellcheck="false"></label>`;
+      }).join("") + `</div>`;
+  }
+  return `<div class="row${it.fresh ? " fresh" : ""}${multi ? " multi" : ""}" data-row="${it.id}">
+    <div class="ficon ${k}">${icon(k === "other" ? "file" : k === "bt31" ? "form" : k, 20)}</div>
+    <div style="min-width:0">
+      <div class="fname"><span class="n" title="${esc(it.folder ? it.folder + "\\" + it.name : it.name)}">${esc(it.name)}</span>${langPill}</div>
+      <div class="fsub" title="${esc(sub)}">${esc(sub)}</div>${sub2 ? `<div class="sub2">${esc(sub2)}</div>` : ""}${preview}${notes}${form}
+    </div>
+    <div class="status-wrap">${statusHtml(it)}</div>
+    <div class="actions">${actions}</div>
+  </div>`;
+}
+
+function render() {
+  for (const slot of ["invite", "approve", "bt31"]) {
+    const list = state.items.filter((x) => x.slot === slot);
+    const box = $("files-" + slot);
+    box.hidden = !list.length;
+    box.innerHTML = list.map(rowHtml).join("");
+  }
+  state.items.forEach((x) => (x.fresh = false));   // เล่นแอนิเมชันเฉพาะแถวที่เพิ่งเพิ่ม
+  renderPanel();
+}
+
+function renderPanel() {
+  const on = wantApprove();
+  $("slot-approve").classList.toggle("off", !on);
+  $("wantApprove").checked = on;
+  $("offNote").hidden = on;
+  document.querySelector('[data-pick="approve"]').disabled = !on;
+  $("wantApprove2").checked = on;
+  const m = mode();
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.mode === m));
+  document.querySelectorAll("[data-mode-panel]").forEach((el) => (el.hidden = el.dataset.modePanel !== m));
+
+  const ready = (slot) => state.items.filter((x) => x.slot === slot && x.st === "ready" && (slot !== "bt31" || enReady(x))).length;
+  const rb = m === "bt31" ? ready("bt31") : 0;
+  const ri = m === "export" ? ready("invite") : 0, ra = m === "export" && on ? ready("approve") : 0;
+  $("sumBt31Row").hidden = m !== "bt31";
+  $("sumInviteRow").hidden = m === "bt31";
+  $("sumBt31").textContent = `${rb} ไฟล์`;
+  $("sumInvite").textContent = `${ri} ไฟล์`;
+  $("sumApprove").textContent = m === "bt31" ? (on ? "สร้างด้วย" : "ไม่สร้าง") : on ? `${ra} ไฟล์` : "ไม่ต้องการ";
+  $("sumApproveRow").classList.toggle("dim", !on);
+  // จำนวนหนังสือแยกตามภาษา (เฉพาะไฟล์ที่จะถูกแปลงรอบนี้)
+  const todoNow = state.items.filter((x) => x.st === "ready" && active(x));
+  const th = todoNow.filter((x) => x.lang === "th").length, en = todoNow.filter((x) => x.lang === "en").length;
+  $("sumLangRow").hidden = !todoNow.length;
+  $("sumLang").textContent = [th && `ไทย ${th}`, en && `อังกฤษ ${en}`].filter(Boolean).join(" · ");
+  const total = ri + ra + rb;
+  $("runBtn").disabled = state.busy || !total;
+  $("runLabel").textContent = state.busy ? "กำลังแปลง…" : total ? `ปรับเอกสาร ${total} ไฟล์` : "ปรับเอกสาร";
+  $("progress").classList.toggle("on", state.busy);
+  $("folderBtn").hidden = !state.lastOutput;
+  $("clearBtn").hidden = !state.items.length || state.busy;
+  renderSettings();
+}
+
+function renderSettings() {
+  const s = state.settings;
+  $("optPdf").checked = !!s.pdf;
+  const folder = s.dest === "folder" && s.outdir;
+  $("destSame").classList.toggle("on", !folder);
+  $("destFolder").classList.toggle("on", !!folder);
+  $("destPath").innerHTML = folder ? icon("folder", 15) + `<span>${esc(s.outdir)}</span>` : `<span>ไฟล์ที่ลากมาวางจะบันทึกใน Downloads</span>`;
+}
+
+async function saveSettings(patch) {
+  state.settings = { ...state.settings, ...patch };
+  render();
+  try { state.settings = (await api("/api/settings", patch)).settings; } catch (e) { toast(e.message, "alert"); }
+}
+
+async function refreshDownloads() {
+  try {
+    const { count } = await api("/api/downloads_count");
+    $("dlCount").textContent = count;
+    $("dlCount").hidden = !count;
+  } catch (_) {}
+}
+
+// ---------- events ----------
+document.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = async () => {
+  const type = b.dataset.pick === "bt31" ? "pdf" : "export";
+  try { addItems((await api("/api/pick_files", { type })).items, b.dataset.pick); } catch (e) { toast(e.message, "alert"); }
+}));
+document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => saveSettings({ mode: t.dataset.mode })));
+$("wantApprove2").onchange = (e) => saveSettings({ want_approve: e.target.checked });
+$("dlBtn").onclick = async () => {
+  try {
+    const { items } = await api("/api/downloads", {});
+    if (!items.length) return toast("ไม่พบไฟล์ Export ใหม่ใน Downloads", "alert");
+    addItems(items);
+  } catch (e) { toast(e.message, "alert"); }
+};
+$("wantApprove").onchange = (e) => saveSettings({ want_approve: e.target.checked });
+$("clearBtn").onclick = () => {
+  const ids = state.items.map((x) => x.id);
+  state.items = [];
+  state.lastOutput = "";
+  render();
+  api("/api/remove", { ids }).catch(() => {});
+};
+$("optPdf").onchange = (e) => saveSettings({ pdf: e.target.checked });
+$("destSame").onclick = () => saveSettings({ dest: "same" });
+$("destFolder").onclick = async () => {
+  try {
+    const { path } = await api("/api/pick_folder", {});
+    if (path) saveSettings({ dest: "folder", outdir: path });
+  } catch (e) { toast(e.message, "alert"); }
+};
+$("folderBtn").onclick = () => api("/api/reveal", { path: state.lastOutput }).catch((e) => toast(e.message, "alert"));
+
+document.querySelector("main").addEventListener("input", (e) => {
+  const inp = e.target.closest("input[data-en]");
+  if (!inp) return;
+  const it = state.items.find((x) => x.id === inp.dataset.en);
+  if (!it) return;
+  it.en[inp.dataset.key] = inp.value;
+  if (it.st === "error" && it.ok) it.st = "ready";      // แก้ข้อมูลแล้วลองใหม่ได้
+  inp.closest(".enrow").classList.toggle("need", !enValid(inp.value));
+  const row = document.querySelector(`[data-row="${it.id}"] .status-wrap`);
+  if (row) row.innerHTML = statusHtml(it);
+  renderPanel();
+});
+
+document.querySelector("main").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  try {
+    if (b.dataset.remove) {
+      state.items = state.items.filter((x) => x.id !== b.dataset.remove);
+      render();
+      await api("/api/remove", { ids: [b.dataset.remove] });
+    } else if (b.dataset.move) {
+      const it = state.items.find((x) => x.id === b.dataset.move);
+      it.slot = it.kind_code;
+      if (it.slot === "approve" && !wantApprove()) saveSettings({ want_approve: true });
+      else render();
+    } else if (b.dataset.open) await api("/api/open", { path: b.dataset.open });
+    else if (b.dataset.reveal) await api("/api/reveal", { path: b.dataset.reveal });
+  } catch (err) { toast(err.message, "alert"); }
+});
+
+$("runBtn").onclick = async () => {
+  const todo = state.items.filter((x) => x.st === "ready" && active(x));
+  if (!todo.length) return;
+  state.busy = true;
+  todo.forEach((x) => (x.st = "busy"));
+  $("hint").textContent = "กำลังเปิด Microsoft Word แปลงไฟล์ อาจใช้เวลาสักครู่…";
+  render();
+  try {
+    const extra = Object.fromEntries(todo.filter((x) => x.slot === "bt31" && x.lang === "en").map((x) => [x.id, x.en]));
+    const { results } = await api("/api/convert", { ids: todo.map((x) => x.id), settings: state.settings, extra });
+    let ok = 0, bad = 0;
+    for (const it of todo) {
+      const r = results[it.id];
+      if (!r) { it.st = "ready"; continue; }
+      it.result = r;
+      it.st = r.ok ? "done" : "error";
+      if (r.ok) { ok++; state.lastOutput = r.docx; } else bad++;
+    }
+    toast(bad ? `เสร็จ ${ok} ไฟล์ · ไม่สำเร็จ ${bad} ไฟล์` : `เสร็จเรียบร้อย ${ok} ไฟล์`, bad ? "alert" : "check");
+    $("hint").textContent = "กดปุ่ม Word หรือ PDF ในรายการเพื่อเปิดไฟล์";
+  } catch (e) {
+    todo.forEach((x) => (x.st = "ready"));
+    toast("แปลงไม่สำเร็จ: " + e.message, "alert");
+    $("hint").textContent = "ใช้ Microsoft Word ในเครื่องแปลงไฟล์";
+  } finally {
+    state.busy = false;
+    render();
+    refreshDownloads();
+  }
+};
+
+// ---------- drag & drop: วางในช่องไหน เข้าช่องนั้น / วางนอกช่อง จัดตามประเภทไฟล์ ----------
+const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+const zoneOf = (e) => {
+  const slot = e.target.closest?.(".slot");
+  return slot && !slot.classList.contains("off") ? slot.querySelector(".zone") : null;
+};
+let overZone = null;
+function setOver(z) {
+  if (overZone === z) return;
+  overZone?.classList.remove("over");
+  overZone = z;
+  z?.classList.add("over");
+}
+window.addEventListener("dragover", (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  const off = e.target.closest?.(".slot.off");
+  e.dataTransfer.dropEffect = off ? "none" : "copy";
+  setOver(zoneOf(e));
+});
+window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) setOver(null); });
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const zone = zoneOf(e);
+  setOver(null);
+  if (state.busy) return;
+  if (e.target.closest?.(".slot.off")) return toast("ติ๊ก “ต้องการหนังสือขออนุมัติ” ก่อน จึงจะวางไฟล์ในช่องนี้ได้", "info");
+  const files = [...e.dataTransfer.files].filter((f) => /\.(doc|html?|pdf)$/i.test(f.name));
+  if (!files.length) return toast("รองรับไฟล์ .doc จากระบบ หรือ PDF หน้า บฑ.31", "alert");
+  const added = [];
+  for (const f of files) {
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    try { added.push((await api("/api/upload", { name: f.name, data: btoa(bin) })).item); }
+    catch (err) { toast(err.message, "alert"); }
+  }
+  addItems(added, zone ? zone.dataset.zone : undefined);
+});
+
+// ---------- theme ----------
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (_) {}
+$("themeBtn").onclick = () => {
+  const cur = document.documentElement.dataset.theme;
+  const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("theme", dark ? "light" : "dark"); } catch (_) {}
+};
+
+// ---------- start ----------
+(async () => {
+  try {
+    const init = await api("/api/init");
+    state.settings = init.settings;
+    $("dlCount").textContent = init.downloads_new;
+    $("dlCount").hidden = !init.downloads_new;
+    render();
+    if (init.items.length) addItems(init.items);
+  } catch (e) {
+    render();
+    toast("เชื่อมต่อโปรแกรมไม่ได้: " + e.message, "alert");
+  }
+  setInterval(() => api("/api/ping", {}).catch(() => {}), 5000);
+  window.addEventListener("focus", refreshDownloads);
+})();
+</script>
+</body>
+</html>
