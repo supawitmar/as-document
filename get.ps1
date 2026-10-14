@@ -1,7 +1,8 @@
 # One-step setup: download the program from GitHub, extract it, then run install.ps1.
 # Run on a new computer (Win+R, paste, Enter):
 #   powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/supawitmar/as-document/main/get.ps1 | iex"
-# Running it again updates the program; local files (settings.json, translations.json, converted.json) are kept.
+# Running it again updates the program; local files (settings.json, converted.json,
+# doctypes/*/data/translations.json) are kept.
 # This file is intentionally ASCII-only so it runs correctly however it is downloaded.
 param(
     [string]$Repo = "supawitmar/as-document",
@@ -13,7 +14,7 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 Write-Host ""
-Write-Host "=== BT.31 document system - download and install ===" -ForegroundColor Cyan
+Write-Host "=== Document formatting system (BT.31 and more) - download and install ===" -ForegroundColor Cyan
 Write-Host "Install folder: $Dest"
 Write-Host ""
 

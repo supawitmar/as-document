@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-หน้าโปรแกรม "ระบบปรับเอกสาร บฑ.31" แบบเว็บ (เปิดเป็นหน้าต่างแอปของ Microsoft Edge)
+หน้าโปรแกรม "ระบบปรับเอกสาร" (hub) แบบเว็บ — เปิดเป็นหน้าต่างแอปของ Microsoft Edge
 ทำงานในเครื่องเท่านั้น: เซิร์ฟเวอร์ฟังที่ 127.0.0.1 และทุกคำขอต้องมี token
+
+hub ไม่มีกฎของเอกสารใดเลย: รายชื่อประเภทเอกสารมาจาก doctypes/ (core.registry) หน้าจอสร้างจาก manifest
+ของแต่ละประเภท และการอ่าน/แปลงไฟล์ส่งต่อให้ประเภทนั้น (core.doctype.DocType)
 """
 import base64
 import ctypes
@@ -19,31 +22,42 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import bt31
-import fix_letters as fx
+from core import ASSETS, BASE, registry
+from core.doctype import Job
 
-WEB = fx.BASE / "web"
+WEB = BASE / "web"
 DOWNLOADS = Path.home() / "Downloads"
-SETTINGS_FILE = fx.BASE / "settings.json"
-HISTORY_FILE = fx.BASE / "converted.json"
+SETTINGS_FILE = BASE / "settings.json"
+HISTORY_FILE = BASE / "converted.json"
 UPLOADS = Path(tempfile.gettempdir()) / "fixletters_uploads"
 TOKEN = secrets.token_urlsafe(16)
-APP_WINDOW_TITLE = "ระบบปรับเอกสาร บฑ.31"   # ต้องตรงกับ <title> ใน web/index.html
-DEFAULT_SETTINGS = {"pdf": True, "dest": "same", "outdir": "", "want_approve": False, "mode": "export"}
+APP_WINDOW_TITLE = "ระบบปรับเอกสาร"   # ต้องตรงกับ <title> ใน web/index.html
+DEFAULT_SETTINGS = {"pdf": True, "dest": "same", "outdir": "", "doctype": "", "options": {}}
 
-items = {}          # id -> {"path": Path, "origin": "path"|"upload"}
+items = {}          # id -> {"path": Path, "origin": "path"|"upload", "doctype": id}
 allowed = set()     # ไฟล์/โฟลเดอร์ที่อนุญาตให้เปิดจากหน้าเว็บ
 dialog_lock = threading.Lock()
 last_ping = [0.0]
 FILES = [a for a in sys.argv[1:] if not a.startswith("--")]
 
 
-# ---------- ข้อมูล ----------
+# ---------- ตั้งค่า ----------
 def load_settings() -> dict:
     try:
-        return {**DEFAULT_SETTINGS, **json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))}
+        raw = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return dict(DEFAULT_SETTINGS)
+        raw = {}
+    s = {**DEFAULT_SETTINGS, **{k: raw[k] for k in DEFAULT_SETTINGS if k in raw}}
+    opts = dict(raw.get("options") or {})
+    if "want_approve" in raw or "mode" in raw:        # settings.json รุ่นก่อน hub (ตัวเลือกของ บฑ.31 อยู่ชั้นบนสุด)
+        mode = {"bt31": "eform"}.get(raw.get("mode"), raw.get("mode"))
+        opts.setdefault("bt31", {k: v for k, v in (("want_approve", raw.get("want_approve")), ("mode", mode))
+                                 if v is not None})
+    dts = registry.discover()
+    s["options"] = {d.id: {**d.options, **opts.get(d.id, {})} for d in dts.values()}
+    if s["doctype"] not in dts:
+        s["doctype"] = next(iter(dts), "")
+    return s
 
 
 def save_settings(s: dict):
@@ -51,13 +65,26 @@ def save_settings(s: dict):
     SETTINGS_FILE.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def register(path: Path, origin: str) -> dict:
+def update_settings(patch: dict) -> dict:
+    s = load_settings()
+    for k, v in patch.items():
+        if k == "options":        # รวมทีละประเภทเอกสาร
+            for dt_id, o in (v or {}).items():
+                s["options"][dt_id] = {**s["options"].get(dt_id, {}), **o}
+        elif k in DEFAULT_SETTINGS:
+            s[k] = v
+    save_settings(s)
+    return load_settings()
+
+
+# ---------- รายการไฟล์ ----------
+def register(path: Path, origin: str, doctype: str) -> dict:
     path = path.resolve()
     for iid, it in items.items():
-        if it["path"] == path:
+        if it["path"] == path and it["doctype"] == doctype:
             return describe(iid)
     iid = uuid.uuid4().hex[:10]
-    items[iid] = {"path": path, "origin": origin}
+    items[iid] = {"path": path, "origin": origin, "doctype": doctype}
     if origin == "path":
         allowed.add(path.parent)
     return describe(iid)
@@ -65,17 +92,30 @@ def register(path: Path, origin: str) -> dict:
 
 def describe(iid: str) -> dict:
     it = items[iid]
-    info = bt31.inspect(it["path"]) if is_pdf(it["path"]) else fx.inspect(it["path"])
+    try:
+        info = registry.get(it["doctype"]).inspect(it["path"])
+    except Exception as e:      # ประเภทเอกสารอ่านไฟล์ไม่ได้ — แสดงเป็นแถวที่ใช้ไม่ได้ แทนที่จะล้มทั้งหน้า
+        info = {"ok": False, "reason": f"อ่านไฟล์ไม่ได้: {e}"}
     folder = str(it["path"].parent) if it["origin"] == "path" else ""
-    return {"id": iid, "name": it["path"].name, "origin": it["origin"], "folder": folder, **info}
+    return {**info, "subtitle": info.get("subtitle") or folder, "id": iid, "name": it["path"].name,
+            "origin": it["origin"], "folder": folder, "doctype": it["doctype"]}
 
 
-def is_pdf(p: Path) -> bool:
-    return p.suffix.lower() == ".pdf"
+def collect(args: list, prefer: str) -> list:
+    """ไฟล์/โฟลเดอร์จากบรรทัดคำสั่ง (หรือที่ลากมาวางบนไอคอน) -> [(path, doctype)]"""
+    out = []
+    for a in args:
+        p = Path(a)
+        if p.is_dir():
+            dt = registry.get(prefer) if prefer else None
+            out += [(f, prefer) for f in (dt.collect_dir(p) if dt else [])]
+        elif p.exists() and (dt := registry.for_path(p, prefer)):
+            out.append((p, dt.id))
+    return out
 
 
 def converted_log() -> set:
-    """ไฟล์ Export ที่เคยแปลงแล้ว (path + เวลาแก้ไข) — ชื่อไฟล์ผลลัพธ์ไม่ได้อ้างชื่อต้นฉบับ จึงต้องจดไว้"""
+    """ไฟล์ที่เคยแปลงแล้ว (path + เวลาแก้ไข) — ชื่อไฟล์ผลลัพธ์ไม่ได้อ้างชื่อต้นฉบับ จึงต้องจดไว้"""
     try:
         return set(json.loads(HISTORY_FILE.read_text(encoding="utf-8")))
     except (OSError, ValueError):
@@ -94,15 +134,21 @@ def remember_converted(paths: list):
     HISTORY_FILE.write_text(json.dumps(sorted(done)[-2000:], ensure_ascii=False, indent=0), encoding="utf-8")
 
 
-def new_in_downloads(days: int = 3) -> list:
-    """ไฟล์ Export*.doc ใน Downloads ที่ดาวน์โหลดภายใน 3 วันและยังไม่เคยแปลง (ใหม่สุดก่อน)"""
+def new_in_downloads(doctype: str, days: int = 3) -> list:
+    """ไฟล์ใน Downloads ตามรูปแบบชื่อของประเภทเอกสาร ที่ดาวน์โหลดภายใน 3 วันและยังไม่เคยแปลง (ใหม่สุดก่อน)"""
+    try:
+        pattern = (registry.get(doctype).downloads or {}).get("glob")
+    except ValueError:
+        return []
+    if not pattern:
+        return []
     done = converted_log()
     since = time.time() - days * 86400
-    new = [p for p in DOWNLOADS.glob("Export*.doc") if p.stat().st_mtime >= since and source_key(p) not in done]
+    new = [p for p in DOWNLOADS.glob(pattern) if p.stat().st_mtime >= since and source_key(p) not in done]
     return sorted(new, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def ask(kind: str, initial: str):
+def ask(kind: str, initial: str, picker: dict = None):
     """เปิดหน้าต่างเลือกไฟล์/โฟลเดอร์ของ Windows (ได้ path จริง)"""
     import tkinter as tk
     from tkinter import filedialog
@@ -113,68 +159,46 @@ def ask(kind: str, initial: str):
         try:
             if kind == "files":
                 return list(filedialog.askopenfilenames(
-                    parent=root, title="เลือกไฟล์ Export", initialdir=initial,
-                    filetypes=[("ไฟล์ Export", "*.doc *.htm *.html"), ("ทุกไฟล์", "*.*")]))
-            if kind == "pdf":
-                return list(filedialog.askopenfilenames(
-                    parent=root, title="เลือกไฟล์ PDF หน้า บฑ.31", initialdir=initial,
-                    filetypes=[("PDF หน้า บฑ.31", "*.pdf"), ("ทุกไฟล์", "*.*")]))
+                    parent=root, title=picker.get("title", "เลือกไฟล์"), initialdir=initial,
+                    filetypes=picker.get("filters") or [("ทุกไฟล์", "*.*")]))
             return filedialog.askdirectory(parent=root, title="เลือกโฟลเดอร์สำหรับบันทึกไฟล์", initialdir=initial)
         finally:
             root.destroy()
 
 
-def convert(ids: list, settings: dict, extra: dict = None) -> dict:
+def convert(doctype: str, ids: list, settings: dict, extra: dict = None) -> dict:
+    dt = registry.get(doctype)
     chosen = Path(settings["outdir"]) if settings.get("dest") == "folder" and settings.get("outdir") else None
-    sel = [(i, items[i]) for i in ids if i in items]
+    jobs = [Job(i, items[i]["path"], chosen or (items[i]["path"].parent if items[i]["origin"] == "path" else DOWNLOADS))
+            for i in ids if i in items and items[i]["doctype"] == doctype]
+    results = dt.convert(jobs, settings["options"].get(doctype, {}), bool(settings.get("pdf")), extra or {},
+                         log=lambda m: None)
     out = {}
-    # PDF หน้า บฑ.31: สร้างหนังสือจากข้อมูลในแบบฟอร์ม
-    for i, it in [(i, it) for i, it in sel if is_pdf(it["path"])]:
-        dest = chosen or (it["path"].parent if it["origin"] == "path" else DOWNLOADS)
-        r = bt31.convert(it["path"], outdir=dest, pdf=settings.get("pdf"), want_approve=settings.get("want_approve"),
-                         en=(extra or {}).get(i), log=lambda m: None)
-        outputs = [{k: str(o[k]) if o[k] else "" for k in ("kind", "docx", "pdf")} for o in r["outputs"]]
+    for jid, r in results.items():
+        outputs = [{k: str(o.get(k) or "") for k in ("kind", "label", "docx", "pdf", "doc")} for o in r.get("outputs", [])]
         for o in outputs:
-            for f in (o["docx"], o["pdf"]):
+            for f in (o["docx"], o["pdf"], o["doc"]):
                 if f:
                     allowed.update({Path(f), Path(f).parent})
-        out[i] = {"ok": r["ok"], "error": r["error"], "notes": r["notes"], "outputs": outputs,
-                  "docx": next((o["docx"] for o in outputs if o["docx"]), ""), "pdf": "", "doc": ""}
-    sel = [(i, it) for i, it in sel if not is_pdf(it["path"])]
-    # เรียนรู้ชื่อวิชาภาษาอังกฤษจากทุกไฟล์ก่อน เผื่อแยกแปลงหลายกลุ่ม
-    courses = fx.load_courses()
-    for _, it in sel:
-        try:
-            fx.learn_course(fx.parse(fx.read_source(it["path"])), courses)
-        except OSError:
-            pass
-    fx.save_courses(courses)
-
-    groups = {}
-    for i, it in sel:
-        dest = chosen or (it["path"].parent if it["origin"] == "path" else DOWNLOADS)
-        groups.setdefault(dest, []).append(i)
-    for dest, gids in groups.items():
-        by_path = {items[i]["path"]: i for i in gids}
-        # ไม่ติ๊ก "ต้องการหนังสือขออนุมัติ" = ไม่ต้องขออนุมัติผู้บังคับบัญชา -> ตัดประโยคแจ้งผู้บังคับบัญชาในหนังสือเชิญ
-        results = fx.convert(list(by_path), outdir=dest, pdf=settings.get("pdf"),
-                             log=lambda m: None, inform_supervisor=bool(settings.get("want_approve")))
-        for r in results:
-            iid = by_path.get(Path(r["src"]).resolve())
-            if not iid:
-                continue
-            files = {k: str(r[k]) if r[k] else "" for k in ("docx", "pdf", "doc")}
-            for f in files.values():
-                if f:
-                    allowed.add(Path(f))
-                    allowed.add(Path(f).parent)
-            out[iid] = {"ok": bool(r["docx"]), "error": r["error"], "notes": r["notes"], **files}
+        out[jid] = {"ok": bool(r.get("ok")), "error": r.get("error", ""), "notes": r.get("notes", []), "outputs": outputs,
+                    "docx": next((o["docx"] for o in outputs if o["docx"]), "")}
     remember_converted([items[i]["path"] for i, r in out.items() if r["ok"] and items[i]["origin"] == "path"])
     return out
 
 
 def is_allowed(p: Path) -> bool:
     return p in allowed or p.parent in allowed and p.suffix.lower() in (".docx", ".pdf", ".doc")
+
+
+def init_payload() -> dict:
+    s = load_settings()
+    initial = [register(p, "path", d) for p, d in collect(FILES, s["doctype"])]
+    if initial and initial[0]["doctype"] != s["doctype"]:     # เปิดพร้อมไฟล์ -> ไปที่ประเภทเอกสารของไฟล์นั้น
+        s = update_settings({"doctype": initial[0]["doctype"]})
+    return {"settings": s, "doctypes": [d.manifest() for d in registry.all_doctypes()],
+            "load_errors": {k: v.strip().splitlines()[-1] for k, v in registry.errors.items()},
+            "items": initial, "downloads": str(DOWNLOADS),
+            "downloads_new": {d.id: len(new_in_downloads(d.id)) for d in registry.all_doctypes() if d.downloads}}
 
 
 # ---------- HTTP ----------
@@ -202,17 +226,15 @@ class Handler(BaseHTTPRequestHandler):
             html = (WEB / "index.html").read_text(encoding="utf-8").replace("{{TOKEN}}", TOKEN)
             return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         if url.path == "/icon.png":
-            return self._send(200, (fx.ASSETS / "app_icon.png").read_bytes(), "image/png")
+            return self._send(200, (ASSETS / "app_icon.png").read_bytes(), "image/png")
         q = parse_qs(url.query)
         if not self._authorized(q):
             return self._json({"error": "forbidden"}, 403)
         last_ping[0] = time.time()
         if url.path == "/api/init":
-            initial = [register(p, "path") for p in fx.collect(FILES)]
-            return self._json({"settings": load_settings(), "items": initial,
-                               "downloads_new": len(new_in_downloads()), "downloads": str(DOWNLOADS)})
+            return self._json(init_payload())
         if url.path == "/api/downloads_count":
-            return self._json({"count": len(new_in_downloads())})
+            return self._json({"count": len(new_in_downloads(q.get("doctype", [""])[0]))})
         return self._json({"error": "not found"}, 404)
 
     def do_POST(self):
@@ -232,33 +254,37 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 500)
 
     def route(self, path, data):
+        doctype = data.get("doctype") or ""
         if path == "/api/ping":
             return {"ok": True}
         if path == "/api/pick_files":
-            kind = "pdf" if data.get("type") == "pdf" else "files"
-            return {"items": [register(Path(p), "path") for p in ask(kind, str(DOWNLOADS))]}
+            picker = registry.get(doctype).pickers.get(data.get("pick"), {})
+            return {"items": [register(Path(p), "path", doctype) for p in ask("files", str(DOWNLOADS), picker)]}
         if path == "/api/pick_folder":
             s = load_settings()
             return {"path": ask("folder", s.get("outdir") or str(DOWNLOADS)) or ""}
         if path == "/api/downloads":
-            return {"items": [register(p, "path") for p in new_in_downloads()]}
+            return {"items": [register(p, "path", doctype) for p in new_in_downloads(doctype)]}
         if path == "/api/upload":
-            name = Path(data.get("name") or "file.doc").name
+            registry.get(doctype)
+            name = Path(data.get("name") or "file").name
             d = UPLOADS / uuid.uuid4().hex[:8]
             d.mkdir(parents=True, exist_ok=True)
             (d / name).write_bytes(base64.b64decode(data.get("data") or ""))
-            return {"item": register(d / name, "upload")}
+            return {"item": register(d / name, "upload", doctype)}
         if path == "/api/remove":
             for i in data.get("ids", []):
                 items.pop(i, None)
             return {"ok": True}
         if path == "/api/settings":
-            s = {**load_settings(), **data}
-            save_settings(s)
-            return {"settings": load_settings()}
+            return {"settings": update_settings(data)}
         if path == "/api/convert":
-            s = {**load_settings(), **data.get("settings", {})}
-            return {"results": convert(data.get("ids", []), s, data.get("extra") or {})}
+            s = load_settings()
+            patch = data.get("settings", {})
+            s.update({k: v for k, v in patch.items() if k in DEFAULT_SETTINGS and k != "options"})
+            for dt_id, o in (patch.get("options") or {}).items():
+                s["options"][dt_id] = {**s["options"].get(dt_id, {}), **o}
+            return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {})}
         if path in ("/api/open", "/api/reveal"):
             p = Path(data.get("path") or "")
             if not p.exists() or not is_allowed(p):
@@ -300,7 +326,7 @@ def main():
 
     edge = find_edge()
     if edge:
-        subprocess.Popen([str(edge), f"--app={url}", "--window-size=1180,860"])
+        subprocess.Popen([str(edge), f"--app={url}", "--window-size=1180,900"])
     else:
         webbrowser.open(url)
     # อยู่จนกว่าหน้าต่างแอปจะปิด (ตรวจจากชื่อหน้าต่าง) หรือหน้าเว็บหยุดส่งสัญญาณนาน

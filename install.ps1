@@ -1,13 +1,14 @@
-﻿# ติดตั้ง "ระบบปรับเอกสาร บฑ.31" บนเครื่องนี้ (เรียกผ่าน ติดตั้ง.bat)
+﻿# ติดตั้ง "ระบบปรับเอกสาร" (hub — บฑ.31 และประเภทเอกสารอื่นที่เพิ่มภายหลัง) บนเครื่องนี้ (เรียกผ่าน ติดตั้ง.bat)
 #   - ตรวจ Python 3.9+, Microsoft Word, Microsoft Edge, ฟอนต์ TH Sarabun New / TH SarabunPSK
 #     ถ้าขาด: บอกลิงก์ดาวน์โหลด เสนอเปิดหน้าดาวน์โหลดให้ และติดตั้ง Python อัตโนมัติได้ (winget)
 #   - ติดตั้งไลบรารี Python (requirements.txt)
-#   - สร้างไอคอน "ระบบปรับเอกสาร บฑ.31" บน Desktop และในโฟลเดอร์โปรแกรม
+#   - สร้างไอคอน "ระบบปรับเอกสาร" บน Desktop และในโฟลเดอร์โปรแกรม (ลบไอคอนชื่อเดิม "ระบบปรับเอกสาร บฑ.31")
 param([switch]$SkipPip)
 
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $App = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Name = "ระบบปรับเอกสาร บฑ.31"
+$Name = "ระบบปรับเอกสาร"
+$OldNames = @("ระบบปรับเอกสาร บฑ.31")      # ชื่อไอคอนรุ่นก่อน hub — ลบทิ้งเพื่อไม่ให้มีไอคอนซ้ำ
 $problems = 0
 $Links = @{
     Python   = "https://www.python.org/downloads/"
@@ -136,13 +137,19 @@ try {
     $link.Path = $pyw
     $link.Arguments = '"' + (Join-Path $App "app.py") + '"'
     $link.WorkingDirectory = $App
-    $link.Description = "$Name — ปรับไฟล์ Export / สร้างหนังสือจาก PDF บฑ.31"
+    $link.Description = "$Name — จัดรูปแบบเอกสาร (บฑ.31 ฯลฯ) เป็นไฟล์ Word มาตรฐาน"
     $link.SetIconLocation((Join-Path $App "assets\app.ico"), 0)
     $link.Save()
     $desk = [Environment]::GetFolderPath("Desktop")
     Copy-Item -LiteralPath $tmpLnk -Destination (Join-Path $desk "$Name.lnk") -Force
     Copy-Item -LiteralPath $tmpLnk -Destination (Join-Path $App "$Name.lnk") -Force
     Remove-Item -LiteralPath $tmpLnk -Force
+    foreach ($old in $OldNames) {
+        foreach ($dir in @($desk, $App)) {
+            $oldLnk = Join-Path $dir "$old.lnk"
+            if (Test-Path -LiteralPath $oldLnk) { Remove-Item -LiteralPath $oldLnk -Force }
+        }
+    }
     Ok "สร้างไอคอน '$Name' บน Desktop แล้ว"
 } catch {
     Bad "สร้างไอคอนไม่สำเร็จ: $($_.Exception.Message) — เปิดโปรแกรมด้วย ปรับเอกสาร.bat แทนได้"
@@ -151,8 +158,8 @@ try {
 # 7) ทดสอบว่าโปรแกรมโหลดได้
 Write-Host "7) ทดสอบโปรแกรม"
 Push-Location $App
-& $py -c "import fix_letters, bt31, app; print('ok')" 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) { Ok "โหลดโปรแกรมได้" } else { Bad "โหลดโปรแกรมไม่ได้ — ลอง: $py -c `"import fix_letters, bt31, app`" เพื่อดูข้อผิดพลาด" }
+& $py -c "import app; from core import registry; d = registry.discover(); assert d and not registry.errors, registry.errors; print('ok')" 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) { Ok "โหลดโปรแกรมและประเภทเอกสารได้" } else { Bad "โหลดโปรแกรมไม่ได้ — ลอง: $py -c `"import app; from core import registry; registry.discover(); print(registry.errors)`" เพื่อดูข้อผิดพลาด" }
 Pop-Location
 
 Write-Host ""

@@ -2,6 +2,8 @@
 settings.json
 converted.json
 translations.json
+doctypes/*/data/translations.json
+*.migrated
 
 # shortcut สร้างโดย ติดตั้ง.bat (path ต่างกันในแต่ละเครื่อง)
 *.lnk
@@ -18,3 +20,4 @@ __pycache__/
 
 # ไฟล์ตัวอย่างหนังสือจริง (มีข้อมูลบุคคล) — เก็บไว้เฉพาะเครื่อง ไม่เผยแพร่
 assets/example_*.html
+doctypes/*/samples/
