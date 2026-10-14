@@ -278,6 +278,41 @@ main { display: flex; flex-direction: column; gap: 20px; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--card-soft); border: 1px solid var(--line); border-radius: 12px; }
 .seg button { height: 34px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--muted); }
 .seg button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+#docChecks .opt { padding-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+#docChecks .opt + .opt { border-top: 0; padding-top: 2px; }
+.seg.fmt button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg.fmt button.on { color: var(--primary); }
+
+/* ---------- ดูตัวอย่างเอกสาร ---------- */
+.chip-btn.pv { border-color: var(--primary-soft); background: var(--primary-soft); color: var(--primary); }
+.chip-btn.pv:hover { border-color: var(--primary); }
+.chip-btn:disabled { opacity: .5; cursor: not-allowed; }
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px;
+  background: rgba(15, 23, 42, .45); animation: fade .15s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.modal-box { width: min(980px, 100%); height: min(94vh, 1200px); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 24px 64px rgba(0, 0, 0, .3); }
+.modal-h { display: flex; align-items: center; gap: 12px; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line); }
+.modal-h .ttl { flex: 1; min-width: 0; }
+.modal-h .ttl b { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.modal-h .ttl b svg { color: var(--primary); }
+.modal-h .ttl .d { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-tabs { display: flex; gap: 4px; padding: 4px; background: var(--card-soft); border: 1px solid var(--line); border-radius: 12px; }
+.pv-tabs button { height: 32px; padding: 0 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pv-tabs button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+.modal-body { position: relative; flex: 1; background: var(--card-soft); }
+.modal-body iframe { width: 100%; height: 100%; border: 0; display: block; background: #525659; }
+.pv-msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 24px;
+  text-align: center; color: var(--muted); font-size: 14px; }
+.pv-msg.err { color: var(--err); }
+.pv-notes { padding: 8px 20px 0; }
+.modal-f { display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 20px; border-top: 1px solid var(--line); }
+.modal-f .hint { margin: 0; flex: 1; text-align: left; }
+.pv-save:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 640px) { .modal-f { flex-wrap: wrap; } .modal-f .hint { flex-basis: 100%; } }
+@media (max-width: 640px) { .modal { padding: 0; } .modal-box { height: 100vh; border-radius: 0; }
+  .modal-h { flex-wrap: wrap; } .pv-tabs { order: 3; width: 100%; overflow-x: auto; } }
 .dest-path { margin-top: 8px; font-size: 12.5px; color: var(--muted); word-break: break-all; display: flex; gap: 6px; align-items: flex-start; }
 
 .run-panel { padding: 20px; }
@@ -340,10 +375,12 @@ main { display: flex; flex-direction: column; gap: 20px; }
     <aside class="side">
       <section class="card panel">
         <h3>ตัวเลือก</h3>
-        <label class="opt">
-          <div><div class="t">สร้างไฟล์ PDF ด้วย</div><div class="d">ได้ทั้ง .docx และ .pdf</div></div>
-          <span class="switch"><input type="checkbox" id="optPdf"><span></span></span>
-        </label>
+        <div id="docChecks"></div>
+        <div class="label" style="margin-top:0">รูปแบบไฟล์ที่ได้</div>
+        <div class="seg fmt" role="radiogroup" aria-label="รูปแบบไฟล์ที่ได้">
+          <button id="fmtDocx" role="radio"><span data-icon="word" data-size="15"></span>Word (.docx)</button>
+          <button id="fmtPdf" role="radio"><span data-icon="pdf" data-size="15"></span>PDF (.pdf)</button>
+        </div>
         <div class="label">บันทึกไฟล์ที่</div>
         <div class="seg">
           <button id="destSame">ข้างไฟล์ต้นฉบับ</button>
@@ -361,6 +398,26 @@ main { display: flex; flex-direction: column; gap: 20px; }
         <button class="btn btn-outline wide" id="clearBtn" hidden><span data-icon="refresh"></span>เริ่มชุดใหม่</button>
       </section>
     </aside>
+  </div>
+</div>
+<div class="modal" id="pv" hidden role="dialog" aria-modal="true" aria-labelledby="pvTitle">
+  <div class="modal-box">
+    <div class="modal-h">
+      <div class="ttl"><b id="pvTitle"><span data-icon="eye" data-size="18"></span>ดูตัวอย่างเอกสาร</b><div class="d" id="pvSub"></div></div>
+      <div class="pv-tabs" id="pvTabs" hidden></div>
+      <button class="x-btn" id="pvX" title="ปิด" aria-label="ปิด"><span data-icon="x"></span></button>
+    </div>
+    <div class="pv-notes" id="pvNotes"></div>
+    <div class="modal-body">
+      <iframe id="pvFrame" title="ตัวอย่างเอกสาร" hidden></iframe>
+      <div class="pv-msg" id="pvMsg"></div>
+    </div>
+    <div class="modal-f">
+      <div class="hint" id="pvHint">ตรวจเอกสารให้เรียบร้อย แล้วเลือกบันทึกเป็น Word หรือ PDF — บันทึกได้ทันที ไม่ต้องรอแปลงซ้ำ</div>
+      <button class="btn btn-outline" id="pvClose">ปิด</button>
+      <button class="btn btn-outline pv-save" id="pvWord" data-format="docx" disabled><span data-icon="word"></span>สร้างไฟล์ Word</button>
+      <button class="btn btn-soft pv-save" id="pvPdf" data-format="pdf" disabled><span data-icon="pdf"></span>สร้างไฟล์ PDF</button>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -387,6 +444,7 @@ const P = {
   word: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m8 13 1.5 5 2.5-4 2.5 4 1.5-5"/>',
   pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   sparkle: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
   form: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>',
@@ -406,6 +464,14 @@ async function api(path, body) {
     headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+// ส่งไฟล์ที่ลากมาวางเป็นไบต์ตรง ๆ (ไม่แปลงเป็นข้อความ base64) — รองรับไฟล์ใหญ่ได้
+async function uploadRaw(f) {
+  const q = `doctype=${encodeURIComponent(dt().id)}&name=${encodeURIComponent(f.name)}`;
+  const res = await fetch("/api/upload_raw?" + q, { method: "POST", headers: { "X-Token": TOKEN }, body: f });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || res.statusText);
   return data;
@@ -450,6 +516,8 @@ const fieldsFor = (it) => (it.fields || []).filter((f) => !f.requires || opt(f.r
 const fieldsReady = (it) => fieldsFor(it).every((f) => fieldValid(f, (it.values || {})[f.key]));
 // แปลงเฉพาะไฟล์ในช่องที่มองเห็น (แท็บที่เปิดอยู่) และช่องที่เปิดใช้ (gate) และกรอกข้อมูลครบ
 const active = (it) => { const s = slotDef(it.at); return !!s && slotVisible(s) && slotOn(s) && fieldsReady(it); };
+const companion = (it) => !!(slotDef(it.at) || {}).companion;     // ไฟล์ประกอบ (เช่นเอกสารแนบ) ไม่ได้ผลลัพธ์ของตัวเอง
+const companionIds = () => mine().filter((x) => companion(x) && x.st === "ready" && active(x)).map((x) => x.id);
 const readyIn = (s) => mine().filter((x) => x.at === s.id && x.st === "ready" && fieldsReady(x)).length;
 
 // ---------- สร้างหน้าจอตาม manifest ----------
@@ -464,6 +532,10 @@ function renderHub() {
 
 function renderWorkspace() {
   const d = dt();
+  // ตัวเลือกติ๊กของประเภทเอกสาร (manifest: checks) ในแผงตัวเลือก
+  $("docChecks").innerHTML = (d.checks || []).map((c) => `<label class="opt">
+      <div><div class="t">${esc(c.label)}</div>${c.desc ? `<div class="d">${esc(c.desc)}</div>` : ""}</div>
+      <span class="switch"><input type="checkbox" data-toggle="${esc(c.option)}"><span></span></span></label>`).join("");
   $("tabs").hidden = d.modes.length < 2;
   $("tabs").innerHTML = d.modes.map((m) =>
     `<button class="tab${cls(m.color)}" data-mode="${esc(m.id)}" role="tab">${icon(m.icon || "upload", 18)}${esc(m.label)}</button>`).join("");
@@ -478,7 +550,7 @@ function renderWorkspace() {
       ${s.steps ? `<div class="steps">${s.steps.map((t, i) => `<span><b>${i + 1}</b>${esc(t)}</span>`).join("")}</div>` : ""}
       <div class="zone" data-zone="${esc(s.id)}">
         <span class="zi">${icon("upload", 26)}</span>
-        <div class="zt"><b>${esc(s.zone_title || "ลากไฟล์มาวางที่นี่")}</b><span>${esc(s.zone_desc || (s.accept || []).join(" "))}</span></div>
+        <div class="zt"><b>${esc(s.zone_title || "ลากไฟล์มาวางที่นี่")}</b><span>${esc(s.zone_desc || (s.accept || []).join(" "))}${d.max_mb ? ` · ขนาดไม่เกิน ${d.max_mb} MB` : ""}</span></div>
         ${s.pick ? `<button class="btn btn-outline" data-pick="${esc(s.id)}">${icon("plus", 17)}${esc(s.pick_label || "เลือกไฟล์")}</button>` : ""}
       </div>
       <div class="files" data-files="${esc(s.id)}" hidden></div>
@@ -521,14 +593,14 @@ function statusHtml(it) {
     ? `<span class="status warn">${icon("alert", 15)}เสร็จ มีหมายเหตุ</span>`
     : `<span class="status done">${icon("check", 15)}เสร็จแล้ว</span>`;
   if (it.st === "error") return `<span class="status error">${icon("alert", 15)}${it.result ? "ไม่สำเร็จ" : "ใช้ไม่ได้"}</span>`;
-  return `<span class="status ready">พร้อมแปลง</span>`;
+  return `<span class="status ready">${companion(it) ? "พร้อมแนบ" : "พร้อมแปลง"}</span>`;
 }
 
 function rowHtml(it) {
   const hint = it.ok ? slotDef(it.slot) : null;     // ช่องที่ไฟล์นี้ควรอยู่
   const previews = it.st === "done" ? [] : (it.outputs_preview || []).filter((p) => !p.requires || opt(p.requires));
   const preview = it.ok && previews.length
-    ? `<div class="preview" title="ชื่อไฟล์ที่จะได้">${previews.map((p) => `<span>${esc(p.name)}.docx</span>`).join("")}</div>` : "";
+    ? `<div class="preview" title="ชื่อไฟล์ที่จะได้">${previews.map((p) => `<span>${esc(p.name)}.${fmt()}</span>`).join("")}</div>` : "";
   const langPill = it.lang ? `<span class="lang ${esc(it.lang)}" title="${esc(it.lang_source || "")}">${esc(it.lang_label || it.lang.toUpperCase())}</span>` : "";
   let notes = "";
   if (it.st === "error") notes = `<div class="note err">${esc(it.result ? it.result.error : it.reason)}</div>`;
@@ -542,6 +614,10 @@ function rowHtml(it) {
     const k = o.label ? `<span class="k">${esc(o.label)}</span>` : "";
     if (o.docx) actions += `<button class="chip-btn" data-open="${esc(o.docx)}" title="${esc(o.kind)} (Word)">${icon("word", 15)}${k}Word</button>`;
     if (o.pdf) actions += `<button class="chip-btn" data-open="${esc(o.pdf)}" title="${esc(o.kind)} (PDF)">${icon("pdf", 15)}PDF</button>`;
+  }
+  if (it.ok && it.st !== "busy" && !state.busy && !companion(it)) {     // ดูตัวอย่างได้ทั้งก่อนและหลังแปลง
+    const ready = fieldsReady(it);
+    actions += `<button class="chip-btn pv" data-preview="${it.id}" ${ready ? "" : "disabled"} title="${ready ? "ดูหน้าตาเอกสารก่อนสร้างไฟล์" : esc(it.fields_status || "กรอกข้อมูลให้ครบก่อน")}">${icon("eye", 15)}ดูตัวอย่าง</button>`;
   }
   if (it.st === "done" && it.result.docx) actions += `<button class="chip-btn" data-reveal="${esc(it.result.docx)}" title="แสดงในโฟลเดอร์" aria-label="แสดงในโฟลเดอร์">${icon("folder", 15)}</button>`;
   if (!state.busy) actions += `<button class="x-btn" data-remove="${it.id}" title="นำออก" aria-label="นำออก">${icon("x")}</button>`;
@@ -617,7 +693,7 @@ function renderPanel() {
   document.querySelectorAll("[data-toggle]").forEach((t) => (t.checked = opt(t.dataset.toggle)));
 
   // จำนวนหนังสือแยกตามภาษา (เฉพาะไฟล์ที่จะถูกแปลงรอบนี้)
-  const todoNow = mine().filter((x) => x.st === "ready" && active(x));
+  const todoNow = mine().filter((x) => x.st === "ready" && active(x) && !companion(x));
   const th = todoNow.filter((x) => x.lang === "th").length, en = todoNow.filter((x) => x.lang === "en").length;
   const langs = [th && `ไทย ${th}`, en && `อังกฤษ ${en}`].filter(Boolean).join(" · ");
   $("sum").innerHTML = summaryRows()
@@ -634,9 +710,14 @@ function renderPanel() {
   renderSettings();
 }
 
+const fmt = () => (state.settings.format === "pdf" ? "pdf" : "docx");     // รูปแบบไฟล์ที่ส่งออก
+
 function renderSettings() {
   const s = state.settings;
-  $("optPdf").checked = !!s.pdf;
+  for (const [id, f] of [["fmtDocx", "docx"], ["fmtPdf", "pdf"]]) {
+    $(id).classList.toggle("on", fmt() === f);
+    $(id).setAttribute("aria-checked", fmt() === f);
+  }
   const folder = s.dest === "folder" && s.outdir;
   $("destSame").classList.toggle("on", !folder);
   $("destFolder").classList.toggle("on", !!folder);
@@ -697,7 +778,12 @@ $("clearBtn").onclick = () => {
   render();
   api("/api/remove", { ids }).catch(() => {});
 };
-$("optPdf").onchange = (e) => saveSettings({ pdf: e.target.checked });
+$("docChecks").addEventListener("change", (e) => {
+  const t = e.target.closest("input[data-toggle]");
+  if (t) saveOptions({ [t.dataset.toggle]: t.checked });
+});
+$("fmtDocx").onclick = () => saveSettings({ format: "docx" });
+$("fmtPdf").onclick = () => saveSettings({ format: "pdf" });
 $("destSame").onclick = () => saveSettings({ dest: "same" });
 $("destFolder").onclick = async () => {
   try {
@@ -744,33 +830,34 @@ main.addEventListener("click", async (e) => {
       else render();
     } else if (b.dataset.open) await api("/api/open", { path: b.dataset.open });
     else if (b.dataset.reveal) await api("/api/reveal", { path: b.dataset.reveal });
+    else if (b.dataset.preview) await openPreview(b.dataset.preview);
   } catch (err) { toast(err.message, "alert"); }
 });
 
-$("runBtn").onclick = async () => {
-  const todo = mine().filter((x) => x.st === "ready" && active(x));
-  if (!todo.length) return;
+// todo: รายการที่จะแปลง (รวมไฟล์แนบ) · format: "docx" | "pdf" (ไม่ระบุ = ตามตัวเลือกด้านขวา)
+async function convertItems(todo, format = fmt()) {
+  if (!todo.some((x) => !companion(x)) || state.busy) return;
   state.busy = true;
   todo.forEach((x) => (x.st = "busy"));
   $("hint").textContent = "กำลังเปิด Microsoft Word แปลงไฟล์ อาจใช้เวลาสักครู่…";
   render();
   try {
     const extra = Object.fromEntries(todo.filter((x) => (x.fields || []).length).map((x) => [x.id, x.values]));
-    const { pdf, dest, outdir } = state.settings;
+    const { dest, outdir } = state.settings;
     const { results } = await api("/api/convert", {
-      doctype: dt().id, ids: todo.map((x) => x.id), extra,
-      settings: { pdf, dest, outdir, options: { [dt().id]: opts() } },
+      doctype: dt().id, ids: todo.map((x) => x.id), extra, companions: todo.filter(companion).map((x) => x.id),
+      settings: { format, dest, outdir, options: { [dt().id]: opts() } },
     });
     let ok = 0, bad = 0;
     for (const it of todo) {
       const r = results[it.id];
-      if (!r) { it.st = "ready"; continue; }
+      if (!r || companion(it)) { it.st = "ready"; continue; }     // ไฟล์แนบใช้ซ้ำกับชุดถัดไปได้
       it.result = r;
       it.st = r.ok ? "done" : "error";
       if (r.ok) { ok++; state.lastOutput = r.docx; } else bad++;
     }
     toast(bad ? `เสร็จ ${ok} ไฟล์ · ไม่สำเร็จ ${bad} ไฟล์` : `เสร็จเรียบร้อย ${ok} ไฟล์`, bad ? "alert" : "check");
-    $("hint").textContent = "กดปุ่ม Word หรือ PDF ในรายการเพื่อเปิดไฟล์";
+    $("hint").textContent = `กดปุ่ม ${format === "pdf" ? "PDF" : "Word"} ในรายการเพื่อเปิดไฟล์`;
   } catch (e) {
     todo.forEach((x) => (x.st = "ready"));
     toast("แปลงไม่สำเร็จ: " + e.message, "alert");
@@ -780,7 +867,80 @@ $("runBtn").onclick = async () => {
     render();
     refreshDownloads();
   }
+}
+$("runBtn").onclick = () => convertItems(mine().filter((x) => x.st === "ready" && active(x)));
+
+// ---------- ดูตัวอย่างเอกสาร: สร้าง PDF ชั่วคราวด้วย Word แล้วแสดงในหน้าต่างนี้ ----------
+let pvSeq = 0, pvItem = null;
+function pvSaveEnabled(on) {
+  document.querySelectorAll(".pv-save").forEach((b) => (b.disabled = !on));
+}
+function pvShow(page) {
+  $("pvFrame").hidden = false;
+  $("pvMsg").hidden = true;
+  $("pvFrame").src = `${page.url}?token=${encodeURIComponent(TOKEN)}#view=FitH&navpanes=0`;
+  [...$("pvTabs").children].forEach((b) => b.classList.toggle("on", b.dataset.url === page.url));
+}
+function pvMessage(html, err) {
+  $("pvFrame").hidden = true;
+  $("pvFrame").removeAttribute("src");
+  $("pvMsg").hidden = false;
+  $("pvMsg").className = "pv-msg" + (err ? " err" : "");
+  $("pvMsg").innerHTML = html;
+}
+function closePreview() {
+  pvSeq++;
+  $("pv").hidden = true;
+  $("pvFrame").removeAttribute("src");
+}
+async function openPreview(id) {
+  const it = state.items.find((x) => x.id === id);
+  if (!it) return;
+  const seq = ++pvSeq;
+  pvItem = id;
+  pvSaveEnabled(false);
+  $("pvHint").textContent = it.st === "done"
+    ? "ไฟล์นี้สร้างแล้ว — กดสร้างอีกครั้งจะได้ไฟล์ใหม่ (ไม่เขียนทับไฟล์เดิม)"
+    : "ตรวจเอกสารให้เรียบร้อย แล้วเลือกบันทึกเป็น Word หรือ PDF — บันทึกได้ทันที ไม่ต้องรอแปลงซ้ำ";
+  $("pv").hidden = false;
+  $("pvSub").textContent = it.name;
+  $("pvTabs").hidden = true;
+  $("pvNotes").innerHTML = "";
+  pvMessage(`${SPIN}<div>กำลังสร้างตัวอย่างด้วย Microsoft Word…</div><div style="font-size:12.5px">อาจใช้เวลาสักครู่</div>`);
+  $("pvClose").focus();
+  try {
+    const r = await api("/api/preview", { doctype: dt().id, id, options: opts(), companions: companionIds(),
+      extra: (it.fields || []).length ? it.values : {} });
+    if (seq !== pvSeq) return;           // ผู้ใช้ปิด/เปิดตัวอย่างอื่นไปแล้ว
+    if (!r.ok) return pvMessage(`${icon("alert", 28)}<div>${esc(r.error)}</div>`, true);
+    $("pvNotes").innerHTML = (r.notes || []).map((n) => `<div class="note">${icon("info", 14)}${esc(n)}</div>`).join("");
+    $("pvTabs").innerHTML = r.pages.map((p) =>
+      `<button data-url="${esc(p.url)}">${icon(/อนุมัติ/.test(p.kind) ? "approve" : "invite", 15)}${esc(p.label || p.kind)}</button>`).join("");
+    $("pvTabs").hidden = r.pages.length < 2;
+    pvShow(r.pages[0]);
+    pvSaveEnabled(true);
+  } catch (e) {
+    if (seq === pvSeq) pvMessage(`${icon("alert", 28)}<div>สร้างตัวอย่างไม่สำเร็จ: ${esc(e.message)}</div>`, true);
+  }
+}
+$("pvTabs").onclick = (e) => {
+  const b = e.target.closest("button[data-url]");
+  if (b) pvShow({ url: b.dataset.url });
 };
+$("pvX").onclick = closePreview;
+document.querySelectorAll(".pv-save").forEach((b) => (b.onclick = () => {
+  const it = state.items.find((x) => x.id === pvItem);
+  if (!it) return;
+  const format = b.dataset.format;
+  closePreview();
+  saveSettings({ format });            // รูปแบบที่เลือกกลายเป็นค่าเริ่มต้นของครั้งต่อไป
+  if (it.st === "done" || it.st === "error") it.st = "ready";
+  const comps = mine().filter((x) => companion(x) && x.st === "ready" && active(x));
+  convertItems([it, ...comps], format);
+}));
+$("pvClose").onclick = closePreview;
+$("pv").onclick = (e) => { if (e.target === $("pv")) closePreview(); };
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("pv").hidden) closePreview(); });
 
 // ---------- drag & drop: วางในช่องไหน เข้าช่องนั้น / วางนอกช่อง จัดตามที่ประเภทเอกสารแนะนำ ----------
 const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
@@ -813,14 +973,17 @@ window.addEventListener("drop", async (e) => {
     const s = slotDef(offSlot.dataset.slot);
     return toast(`ติ๊ก “${s.toggle ? s.toggle.label : s.gate}” ก่อน จึงจะวางไฟล์ในช่องนี้ได้`, "info");
   }
-  const files = [...e.dataTransfer.files].filter((f) => dt().accept.includes(ext(f.name)));
+  let files = [...e.dataTransfer.files].filter((f) => dt().accept.includes(ext(f.name)));
   if (!files.length) return toast(dt().drop_hint || "รองรับไฟล์ " + dt().accept.join(" "), "alert");
+  const max = dt().max_mb, big = max ? files.filter((f) => f.size > max * 1048576) : [];
+  if (big.length) {      // ไม่ต้องอัปโหลดไฟล์ที่ใหญ่เกินกำหนด
+    toast(`${big[0].name} ขนาด ${(big[0].size / 1048576).toFixed(1)} MB เกินกำหนด (ไม่เกิน ${max} MB)`, "alert");
+    files = files.filter((f) => !big.includes(f));
+    if (!files.length) return;
+  }
   const added = [];
   for (const f of files) {
-    const buf = new Uint8Array(await f.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    try { added.push((await api("/api/upload", { doctype: dt().id, name: f.name, data: btoa(bin) })).item); }
+    try { added.push((await uploadRaw(f)).item); }
     catch (err) { toast(err.message, "alert"); }
   }
   addItems(added, zone ? zone.dataset.zone : undefined);

@@ -13,7 +13,7 @@ from pathlib import Path
 from core.text import NB, THAI, clean, is_word_saved, paragraphs, read_source, to_lines
 
 from .layout import render_letters
-from .letter import (EN_LABELS, NO_TITLE_TH, SUPERVISOR_INFORMED, Letter, course_of, fix_degree, fix_en,
+from .letter import (EN_LABELS, NO_TITLE_TH, SUPERVISOR_INFORMED, Letter, course_of, fix_degree, fix_en, subject_of, use_attachment,
                      fix_text, kind_name, lang_label, learn_course, load_courses, output_stem, save_courses)
 
 SIGN_OFF = r"ขอแสดงความนับถือ|Sincerely|Yours|Best regards|Kind regards"
@@ -105,7 +105,7 @@ def parse_header_en(L: Letter, lines: list):
     L.address = [c for c in cl[:top] if c]
     if ref is not None:
         L.header["ref"] = cl[ref]
-        date = [c for c in cl[ref + 1:dear] if c]
+        date = [c for c in cl[ref + 1:dear] if c and not c.startswith("Subject")]
         if date:
             L.header["date"] = " ".join(date)
     if dear < len(cl):
@@ -122,6 +122,8 @@ def normalize_en(L: Letter, courses: dict) -> list:
         m = re.fullmatch(r"([A-Za-z]+)\s*,\s*(\d{4})", d)       # "April , 2026" -> เว้นที่ให้เติมวัน
         L.header["date"] = f"{m[1]}{NB * 5}, {m[2]}" if m else d
     L.address = L.address or ["Mahidol University"]
+    if subject_of(L):
+        L.header["subject"] = subject_of(L)
     L.body = [fix_en(p) for p in L.body]
     L.body = [p + "." if re.search(r"[A-Za-z0-9)]$", p) else p for p in L.body]
     L.closing = [fix_en(p) for p in L.closing]
@@ -152,6 +154,8 @@ def normalize(L: Letter, courses: dict, inform_supervisor: bool = True) -> list:
         return normalize_en(L, courses)
     notes = []
     L.header = {k: NO_TITLE_TH.sub("", fix_text(v)) for k, v in L.header.items()}
+    if "subject" in L.header:
+        L.header["subject"] = subject_of(L)
     if "date" in L.header:
         L.header["date"] = "วันที่ " + NB * 4 + " " + L.header["date"][len("วันที่"):].strip()
     L.body = [NO_TITLE_TH.sub("", fix_degree(fix_text(p))) for p in L.body]
@@ -226,7 +230,10 @@ def inspect(path: Path) -> dict:
             "lang_source": "ตามถ้อยคำในไฟล์ Export", "to": to, "outputs_preview": [output_stem(L)], "reason": ""}
 
 
-def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, inform_supervisor=True) -> list:
+def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, inform_supervisor=True, fmt=None,
+            attachment=False, attach_files=()) -> list:
+    """attachment=True: สอนมากกว่า 1 รายการ -> แถวหัวข้อ/วันที่/เวลา/สถานที่ เป็น "รายละเอียดตามเอกสารแนบ"
+    attach_files: PDF ตารางสอนที่ต่อท้ายหนังสือทุกฉบับ"""
     """แปลงไฟล์ทั้งหมด คืนรายการผลลัพธ์
     [{'src': Path, 'kind': str, 'docx': Path|None, 'pdf': Path|None, 'doc': Path|None, 'notes': [...], 'error': str}]"""
     courses = load_courses()
@@ -260,11 +267,13 @@ def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, info
     entries = []
     for f, L in letters:
         notes = normalize(L, courses, inform_supervisor)
+        if attachment:
+            use_attachment(L)
         if clean(re.sub(r"^(?:เรียน|Dear)", "", L.header.get("to", ""))) in ("", "-"):
             notes.append("ไฟล์ต้นฉบับไม่มีชื่อผู้รับ (บรรทัด เรียน/Dear ว่าง) — กรอกในระบบแล้ว export ใหม่ หรือแก้ในไฟล์ Word")
         od = Path(outdir) if outdir else f.parent
-        entries.append(dict(src=f, letter=L, outdir=od, stem=output_stem(L), notes=notes))
-    return results + render_letters(entries, pdf=pdf, keep_doc=keep_doc, log=log)
+        entries.append(dict(src=f, letter=L, outdir=od, stem=output_stem(L), notes=notes, attach=list(attach_files)))
+    return results + render_letters(entries, pdf=pdf, keep_doc=keep_doc, log=log, fmt=fmt)
 
 
 def main(argv=None) -> int:

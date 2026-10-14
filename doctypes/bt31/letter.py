@@ -26,6 +26,16 @@ TIME_RANGE = re.compile(r"(\d{1,2}[.:]\d{2})\s*-\s*(\d{1,2}[.:]\d{2})")
 # ระดับปริญญาที่ระบบใส่หลังคำว่า "หลักสูตร" (เช่น "หลักสูตร ปริญญาโท X", "หลักสูตร และ ปริญญาเอก X") — ตัดออก
 #   "และ" ต้องเป็นคำเดี่ยว (มีช่องว่างทั้งสองข้าง) เพื่อไม่ให้กระทบชื่อหลักสูตรเช่น "หลักสูตรและการสอน"
 DEGREE_WORDS = re.compile(r"หลักสูตร(?:\s*ปริญญา(?:ตรี|โท|เอก)|\s+และ(?=\s))+\s*")
+# เรื่องของหนังสือ — ใช้แทนเรื่องที่ระบบใส่มา (ตามไฟล์ตัวอย่างที่เจ้าหน้าที่แก้ 14 ต.ค. 2569)
+#   ภาษาอังกฤษ: บรรทัด "Subject ..." ใต้วันที่ (ไฟล์ Export จากระบบไม่มีบรรทัดนี้)
+SUBJECTS = {
+    "th": {"invite": "เรื่อง ขอเรียนเชิญเป็นอาจารย์ผู้สอน",
+           "approve": "เรื่อง ขออนุมัติให้บุคลากรในสังกัดเป็นอาจารย์ผู้สอน"},
+    "en": {"invite": "Subject Course Instructor Invitation",
+           "approve": "Subject Approval Request: Staff as Course Instructor"},
+}
+# ตัวเลือก "สอนมากกว่า 1 รายการ": ทุกแถวในตารางยกเว้นวิชา แสดงข้อความนี้แทนรายละเอียด
+ATTACHMENT_TEXT = {"th": "รายละเอียดตามเอกสารแนบ", "en": "See attachment"}
 KIND_NAMES = {"approve": "หนังสืออนุมัติ", "invite": "หนังสือเชิญ", "generic": "หนังสือ"}
 
 
@@ -53,6 +63,10 @@ def fix_degree(s: str) -> str:
     'หลักสูตร ปริญญาโท วิทยาศาสตรมหาบัณฑิต' -> 'หลักสูตร วิทยาศาสตรมหาบัณฑิต'
     'หลักสูตร และ ปริญญาเอก ปรัชญาดุษฎีบัณฑิต' -> 'หลักสูตร ปรัชญาดุษฎีบัณฑิต'"""
     return DEGREE_WORDS.sub("หลักสูตร ", s)
+
+
+def subject_of(L: "Letter") -> str:
+    return SUBJECTS.get(L.lang, {}).get(L.kind) or L.header.get("subject", "")
 
 
 def fix_en(s: str) -> str:
@@ -94,6 +108,21 @@ def course_of(L: Letter):
             if vm:
                 return i, vm.group(1).replace(" ", ""), CREDITS.sub("", vm.group(2)).strip()
     return None
+
+
+def use_attachment(L: Letter):
+    """หัวข้อ/วันที่/เวลา/สถานที่ (TOPIC/DATE/TIME/PLACE) -> "รายละเอียดตามเอกสารแนบ" / "See attachment"
+    ใช้โครงเดียวกับการสอนครั้งเดียว: วิชา + หัวข้อ/วันที่/เวลา/สถานที่ อย่างละแถว (ไม่ซ้ำตามจำนวนครั้งที่สอน)"""
+    c = course_of(L)
+    text = ATTACHMENT_TEXT.get(L.lang, ATTACHMENT_TEXT["th"])
+    rows, seen = [], set()
+    for i, (label, value) in enumerate(L.rows):
+        if c and i == c[0]:
+            rows.append((label, value))
+        elif label not in seen:
+            seen.add(label)
+            rows.append((label, text))
+    L.rows = rows
 
 
 def learn_course(L: Letter, courses: dict):

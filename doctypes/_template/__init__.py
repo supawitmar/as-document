@@ -82,10 +82,11 @@ class Template(DocType):
                                 build=lambda logo, d=doc: build_html(d, logo)))
             ids.append(j.id)
         out = {}
-        for jid, r in zip(ids, render.render(entries, pdf=pdf, log=log)):
-            out[jid] = {"ok": bool(r["docx"]), "error": r["error"], "notes": r["notes"],
+        for jid, r in zip(ids, render.render(entries, log=log, fmt="both" if pdf == "both" else "pdf" if pdf else "docx")):
+            done = bool(r["docx"] or r["pdf"])
+            out[jid] = {"ok": done, "error": r["error"], "notes": r["notes"],
                         "outputs": [{"kind": r["kind"], "docx": r["docx"], "pdf": r["pdf"], "doc": r["doc"]}]
-                        if r["docx"] else []}
+                        if done else []}
         return out
 
 

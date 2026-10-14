@@ -20,11 +20,11 @@ INDENT = ("<span style='mso-spacerun:yes'> </span>"
 SIGN_CENTER = 0.75     # แกนกลางของบล็อกลายมือชื่อ (สัดส่วนจากขอบซ้ายของพื้นที่พิมพ์) ตามไฟล์ตัวอย่าง
 
 DOC_TYPES = {
-    # บรรทัดว่างก่อนข้อมูลติดต่อ, ย่อหน้าว่างหลังคำลงท้าย, ย่อหน้าว่างท้ายเอกสาร,
-    # ระยะห่างตัวอักษรของย่อหน้าแรกหลังตาราง
-    "approve": dict(contact_gap=2, blank_after_closing=True, tail_blank=True, first_closing_spacing=""),
-    "invite": dict(contact_gap=1, blank_after_closing=False, tail_blank=False, first_closing_spacing=".3pt"),
-    "generic": dict(contact_gap=1, blank_after_closing=False, tail_blank=False, first_closing_spacing=""),
+    # ย่อหน้าว่างหลังคำลงท้าย, ย่อหน้าว่างท้ายเอกสาร, ระยะห่างตัวอักษรของย่อหน้าแรกหลังตาราง
+    # (หนังสือภาษาไทยไม่พิมพ์ข้อมูลติดต่ออาจารย์ผู้รับผิดชอบวิชาท้ายหนังสือ — เจ้าหน้าที่ตัดออก 14 ต.ค. 2569)
+    "approve": dict(blank_after_closing=True, tail_blank=True, first_closing_spacing=""),
+    "invite": dict(blank_after_closing=False, tail_blank=False, first_closing_spacing=".3pt"),
+    "generic": dict(blank_after_closing=False, tail_blank=False, first_closing_spacing=""),
 }
 
 # หนังสือภาษาอังกฤษ (ตามไฟล์ตัวอย่าง (EN)): บรรทัดว่างก่อนย่อหน้าท้าย, เยื้องด้วย tab หรือ &nbsp;,
@@ -73,7 +73,7 @@ def build_html_en(L: Letter, logo_src: str) -> str:
     indent13 = "&nbsp;" * 13
     out = [para_en(f'<img width=90 height=90 src="{logo_src}">', align="center"),
            para_en(lines_html(L.address), align="center"),
-           para_en(lines_html([x for x in (h.get("ref"), h.get("date")) if x]))]
+           para_en(lines_html([x for x in (h.get("ref"), h.get("date"), h.get("subject")) if x]))]
     if h.get("to"):
         out.append(para_en("<br>\n" + esc(h["to"])))
     for p in L.body:
@@ -127,16 +127,14 @@ def build_html(L: Letter, logo_src: str) -> str:
         first, *others = [clean(x) for x in L.signature]
         out.append(signature_block([first, "", "", ""] + others, "TH Sarabun New", thai=True,
                                    center=SIGN_CENTER, extra_style=LH + TAB))
-    if L.contact:
-        out.append(para(lines_html([""] * prof["contact_gap"] + L.contact), line_height=False))
     if prof["tail_blank"]:
         out.append(para("&nbsp;", align="right"))
     return wrap_document(out)
 
 
-def render_letters(entries: list, pdf=False, keep_doc=False, log=print) -> list:
+def render_letters(entries: list, pdf=False, keep_doc=False, log=print, fmt=None) -> list:
     """สร้างไฟล์จาก Letter ที่จัดรูปแบบแล้ว
     entries: [{'src': Path, 'letter': Letter, 'outdir': Path, 'stem': str, 'notes': [...]}]"""
     jobs = [dict(src=e["src"], outdir=e["outdir"], stem=e["stem"], notes=e["notes"], kind=kind_name(e["letter"]),
-                 build=lambda logo, L=e["letter"]: build_html(L, logo)) for e in entries]
-    return render.render(jobs, pdf=pdf, keep_doc=keep_doc, log=log)
+                 attach=e.get("attach") or [], build=lambda logo, L=e["letter"]: build_html(L, logo)) for e in entries]
+    return render.render(jobs, pdf=pdf, keep_doc=keep_doc, log=log, fmt=fmt)

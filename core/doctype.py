@@ -7,7 +7,9 @@ hub ไม่รู้จักรายละเอียดของเอก�
 
 หน้าจอของประเภทเอกสาร (ui):
     modes  แท็บวิธีนำเข้า เช่น "ไฟล์ Export" / "PDF e-Form" — แต่ละแท็บมีช่องวางไฟล์ (slots) และแถวสรุป (summary)
-    slots  ช่องวางไฟล์: นามสกุลที่รับ (accept), สี, ไอคอน, ตัวเลือกติ๊กที่หัวช่อง (toggle),
+    checks ตัวเลือกติ๊กในแผง "ตัวเลือก" ด้านขวา [{'option', 'label', 'desc'}] (ค่าเก็บใน options)
+    slots  ช่องวางไฟล์: นามสกุลที่รับ (accept), สี, ไอคอน, ตัวเลือกติ๊กที่หัวช่อง (toggle), companion (ไฟล์ประกอบ
+           เช่นเอกสารแนบ: ไม่ได้ผลลัพธ์ของตัวเอง แต่ส่งไปใน jobs ทุกครั้งที่แปลง/ดูตัวอย่าง),
            ตัวเลือกที่ต้องเปิดก่อนจึงใช้ช่องได้ (gate)
     ไอคอนที่ใช้ได้: ดูชุด P ใน web/index.html · สีที่ใช้ได้: blue violet teal amber rose green
 
@@ -23,6 +25,12 @@ hub ไม่รู้จักรายละเอียดของเอก�
                           check: 'english' = ต้องเป็นภาษาอังกฤษ / 'required' = ห้ามว่าง
 
 ผล convert(jobs, ...) -> {job.id: {'ok', 'error', 'notes', 'outputs': [{'kind','label','docx','pdf','doc'}]}}
+    pdf=True  ผู้ใช้เลือกรูปแบบไฟล์ "PDF" -> ส่งออก .pdf อย่างเดียว; False = Word (.docx) อย่างเดียว
+    pdf="both" (ใช้ตอนดูตัวอย่าง) สร้างทั้งสองแบบในรอบเดียว — hub เก็บไว้แล้วคัดลอกออกตอนผู้ใช้กดบันทึก ไม่ต้องแปลงซ้ำ
+              (ส่งต่อให้ core.render.render(..., fmt=...) ตามค่านี้)
+
+preview(job, ...) -> ผลแบบเดียวกับ convert ของ job นั้น โดยต้องมีไฟล์ 'pdf' ให้หน้าจอแสดง
+    ค่าเริ่มต้น: convert แบบ pdf="both" ลงโฟลเดอร์ชั่วคราวที่ hub เตรียมให้ (job.outdir)
 """
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +54,7 @@ class DocType:
     pickers = {}             # หน้าต่างเลือกไฟล์: {pick: {'title': ..., 'filters': [(ชื่อ, "*.doc *.htm"), ...]}}
     downloads = None         # ปุ่ม "ไฟล์ใหม่ใน Downloads": {'glob': "Export*.doc", 'label': ..., 'title': ...}
     drop_hint = ""           # ข้อความเมื่อวางไฟล์ที่ไม่รองรับ
+    max_mb = 500             # ขนาดไฟล์สูงสุดที่รับ (MB) — ทดสอบแล้วทั้งอัปโหลด ดูตัวอย่าง และต่อท้าย PDF ได้ถึง ~570 MB
     ui = {"modes": [], "slots": []}
 
     # ---------- hub เรียกใช้ ----------
@@ -65,7 +74,7 @@ class DocType:
     def manifest(self) -> dict:
         return {"id": self.id, "name": self.name, "description": self.description, "icon": self.icon,
                 "color": self.color, "options": dict(self.options), "downloads": self.downloads,
-                "drop_hint": self.drop_hint, "accept": sorted(self.accept_exts()), "pickers": sorted(self.pickers),
+                "drop_hint": self.drop_hint, "max_mb": self.max_mb, "accept": sorted(self.accept_exts()), "pickers": sorted(self.pickers),
                 **self.ui}
 
     # ---------- ประเภทเอกสารต้องเขียน ----------
@@ -73,5 +82,12 @@ class DocType:
         raise NotImplementedError
 
     def convert(self, jobs: list, options: dict, pdf: bool, extra: dict, log=print) -> dict:
-        """jobs: [Job], options: ค่าตัวเลือกของประเภทนี้, extra: {job.id: {field key: ค่าที่ผู้ใช้กรอก}}"""
+        """jobs: [Job], options: ค่าตัวเลือกของประเภทนี้, extra: {job.id: {field key: ค่าที่ผู้ใช้กรอก}}
+        pdf: True = ส่งออกเป็น PDF อย่างเดียว / False = Word (.docx) อย่างเดียว"""
         raise NotImplementedError
+
+    def preview(self, job: Job, options: dict, extra: dict, log=print, companions=()) -> dict:
+        """ตัวอย่างเอกสาร (ปุ่ม "ดูตัวอย่าง"): สร้าง PDF ลง job.outdir ซึ่งเป็นโฟลเดอร์ชั่วคราว
+        companions: ไฟล์ในช่อง companion (เช่นเอกสารแนบ) ที่ต้องใช้ประกอบ"""
+        r = self.convert([job, *companions], options, "both", {job.id: extra} if extra else {}, log=log)
+        return r.get(job.id) or {"ok": False, "error": "สร้างตัวอย่างไม่สำเร็จ", "notes": [], "outputs": []}

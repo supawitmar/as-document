@@ -4,7 +4,8 @@
 
 ประเภทเอกสารส่ง "งาน" มาเป็นรายการ entry:
     {'src': Path, 'outdir': Path, 'stem': ชื่อไฟล์ไม่รวมนามสกุล, 'kind': ชื่อเรียกผลลัพธ์, 'notes': [...],
-     'build': ฟังก์ชัน(logo_src) -> Word HTML ทั้งไฟล์}
+     'build': ฟังก์ชัน(logo_src) -> Word HTML ทั้งไฟล์, 'attach': [PDF ที่ต่อท้ายเอกสาร] (ไม่บังคับ)}
+เอกสารแนบต่อท้ายเฉพาะไฟล์ .pdf (หน้าจริงของ PDF) — ไฟล์ .docx เป็นหนังสืออย่างเดียว
 ทุกงานในรอบเดียวแปลงใน Word ตัวเดียว (assets/to_docx.ps1); path ชั่วคราวเป็น ASCII เพราะส่งผ่าน PowerShell/COM
 """
 import json
@@ -60,12 +61,29 @@ def unique(path: Path) -> Path:
     return p
 
 
-def render(entries: list, pdf=False, keep_doc=False, log=print) -> list:
+FORMATS = ("docx", "pdf", "both")
+
+
+def merge_pdf(letter: Path, pdfs: list):
+    """ต่อหน้าของ PDF แนบท้ายไฟล์ PDF หนังสือ"""
+    import pymupdf
+    merged = letter.with_name(letter.stem + "_m.pdf")
+    with pymupdf.open(str(letter)) as out:
+        for p in pdfs:
+            with pymupdf.open(str(p)) as src:
+                out.insert_pdf(src)
+        out.save(str(merged), garbage=3, deflate=True)
+    merged.replace(letter)
+
+
+def render(entries: list, pdf=False, keep_doc=False, log=print, fmt=None) -> list:
     """สร้างไฟล์จาก entry ทั้งหมด (ดูหัวไฟล์) คืน
     [{'src', 'kind', 'docx': Path|None, 'pdf': Path|None, 'doc': Path|None, 'notes', 'error'}]
+    fmt: 'docx' = Word อย่างเดียว / 'pdf' = PDF อย่างเดียว / 'both' — ไม่ระบุ = แบบเดิม (pdf=True -> 'both')
     ถ้า Word ใช้ไม่ได้ บันทึกเป็น .doc (Word HTML) แทน"""
     if not entries:
         return []
+    fmt = fmt if fmt in FORMATS else ("both" if pdf else "docx")
     tmp = Path(tempfile.mkdtemp(prefix="fixletters_"))
     logo = logo_source(tmp)
     jobs = []
@@ -74,15 +92,18 @@ def render(entries: list, pdf=False, keep_doc=False, log=print) -> list:
         od.mkdir(parents=True, exist_ok=True)
         tmp_html = tmp / f"doc{n}.htm"
         tmp_html.write_text(e["build"](logo), encoding="utf-8")
-        job = {"in": str(tmp_html), "docx": str(tmp / f"doc{n}.docx")}
-        if pdf:
+        job = {"in": str(tmp_html)}
+        if fmt != "pdf":
+            job["docx"] = str(tmp / f"doc{n}.docx")
+        if fmt != "docx":
             job["pdf"] = str(tmp / f"doc{n}.pdf")
+        attach = [Path(a) for a in e.get("attach") or [] if Path(a).exists()]
         res = dict(src=e["src"], kind=e["kind"], docx=None, pdf=None, doc=None, notes=e["notes"], error="")
         if keep_doc:
             res["doc"] = unique(od / f"{stem}.doc")
             res["doc"].write_text(e["build"](LOGO_URL), encoding="utf-8")
             log(f"   .doc  -> {res['doc']}")
-        jobs.append((job, od, stem, res))
+        jobs.append((job, od, stem, res, attach))
 
     log("กำลังแปลงด้วย Microsoft Word ...")
     try:
@@ -92,7 +113,7 @@ def render(entries: list, pdf=False, keep_doc=False, log=print) -> list:
         status = None
 
     results = []
-    for job, od, stem, res in jobs:
+    for job, od, stem, res, attach in jobs:
         name = Path(res["src"]).name
         err = "Word ไม่ทำงาน" if status is None else status.get(job["in"], "ไม่ทราบสาเหตุ")
         if err:
@@ -102,13 +123,13 @@ def render(entries: list, pdf=False, keep_doc=False, log=print) -> list:
             res.update(error=err, doc=fallback)
             log(f"!! {name}: {err} -> บันทึกเป็น {fallback}")
         else:
-            res["docx"] = unique(od / f"{stem}.docx")
-            shutil.move(job["docx"], res["docx"])
-            log(f"OK {name} -> {res['docx']}")
-            if job.get("pdf") and Path(job["pdf"]).exists():
-                res["pdf"] = unique(od / f"{stem}.pdf")
-                shutil.move(job["pdf"], res["pdf"])
-                log(f"   pdf   -> {res['pdf']}")
+            for ext in ("docx", "pdf"):
+                if job.get(ext) and Path(job[ext]).exists():
+                    if ext == "pdf" and attach:
+                        merge_pdf(Path(job[ext]), attach)
+                    res[ext] = unique(od / f"{stem}.{ext}")
+                    shutil.move(job[ext], res[ext])
+                    log(f"OK {name} -> {res[ext]}")
             for note in res["notes"]:
                 log(f"   หมายเหตุ: {note}")
         results.append(res)

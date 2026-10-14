@@ -11,6 +11,7 @@ import ctypes
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,23 +21,29 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from core import ASSETS, BASE, registry
 from core.doctype import Job
+from core.render import unique
 
 WEB = BASE / "web"
 DOWNLOADS = Path.home() / "Downloads"
 SETTINGS_FILE = BASE / "settings.json"
 HISTORY_FILE = BASE / "converted.json"
 UPLOADS = Path(tempfile.gettempdir()) / "fixletters_uploads"
+PREVIEWS = Path(tempfile.gettempdir()) / "fixletters_preview"
 TOKEN = secrets.token_urlsafe(16)
 APP_WINDOW_TITLE = "ระบบปรับเอกสาร"   # ต้องตรงกับ <title> ใน web/index.html
-DEFAULT_SETTINGS = {"pdf": True, "dest": "same", "outdir": "", "doctype": "", "options": {}}
+DEFAULT_SETTINGS = {"format": "docx", "dest": "same", "outdir": "", "doctype": "", "options": {}}
+FORMATS = ("docx", "pdf")     # รูปแบบไฟล์ที่ส่งออก: Word อย่างเดียว หรือ PDF อย่างเดียว
 
 items = {}          # id -> {"path": Path, "origin": "path"|"upload", "doctype": id}
 allowed = set()     # ไฟล์/โฟลเดอร์ที่อนุญาตให้เปิดจากหน้าเว็บ
 dialog_lock = threading.Lock()
+preview_lock = threading.Lock()
+preview_files = {}  # รหัสลิงก์ -> (รหัสรายการ, ไฟล์ PDF ตัวอย่าง)
+preview_cache = {}  # รหัสรายการ -> {"sig", "dir", "result"}: ผลจากปุ่มดูตัวอย่าง (มีทั้ง .docx และ .pdf) ใช้ซ้ำตอนบันทึก
 last_ping = [0.0]
 FILES = [a for a in sys.argv[1:] if not a.startswith("--")]
 
@@ -48,6 +55,8 @@ def load_settings() -> dict:
     except (OSError, ValueError):
         raw = {}
     s = {**DEFAULT_SETTINGS, **{k: raw[k] for k in DEFAULT_SETTINGS if k in raw}}
+    if s["format"] not in FORMATS:
+        s["format"] = DEFAULT_SETTINGS["format"]
     opts = dict(raw.get("options") or {})
     if "want_approve" in raw or "mode" in raw:        # settings.json รุ่นก่อน hub (ตัวเลือกของ บฑ.31 อยู่ชั้นบนสุด)
         mode = {"bt31": "eform"}.get(raw.get("mode"), raw.get("mode"))
@@ -63,6 +72,16 @@ def load_settings() -> dict:
 def save_settings(s: dict):
     clean = {k: s.get(k, v) for k, v in DEFAULT_SETTINGS.items()}
     SETTINGS_FILE.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def reset_checks():
+    """เปิดโปรแกรมใหม่: ช่องติ๊กทุกช่อง (ตัวเลือกแบบเปิด/ปิด) กลับเป็นค่าเริ่มต้นของประเภทเอกสาร (ไม่ติ๊ก)
+    — รูปแบบไฟล์ ที่บันทึก และแท็บที่เปิด ยังจำไว้ตามเดิม"""
+    s = load_settings()
+    for d in registry.all_doctypes():
+        o = s["options"].setdefault(d.id, {})
+        o.update({k: v for k, v in d.options.items() if isinstance(v, bool)})
+    save_settings(s)
 
 
 def update_settings(patch: dict) -> dict:
@@ -92,8 +111,13 @@ def register(path: Path, origin: str, doctype: str) -> dict:
 
 def describe(iid: str) -> dict:
     it = items[iid]
+    dt = registry.get(it["doctype"])
+    size_mb = it["path"].stat().st_size / 1048576 if it["path"].exists() else 0
     try:
-        info = registry.get(it["doctype"]).inspect(it["path"])
+        if dt.max_mb and size_mb > dt.max_mb:
+            info = {"ok": False, "reason": f"ไฟล์ขนาด {size_mb:.1f} MB เกินกำหนด (ไม่เกิน {dt.max_mb} MB)"}
+        else:
+            info = dt.inspect(it["path"])
     except Exception as e:      # ประเภทเอกสารอ่านไฟล์ไม่ได้ — แสดงเป็นแถวที่ใช้ไม่ได้ แทนที่จะล้มทั้งหน้า
         info = {"ok": False, "reason": f"อ่านไฟล์ไม่ได้: {e}"}
     folder = str(it["path"].parent) if it["origin"] == "path" else ""
@@ -166,13 +190,46 @@ def ask(kind: str, initial: str, picker: dict = None):
             root.destroy()
 
 
-def convert(doctype: str, ids: list, settings: dict, extra: dict = None) -> dict:
+def preview_sig(doctype: str, iid: str, options: dict, extra: dict, companions: list) -> str:
+    """ลายเซ็นของสิ่งที่ใช้สร้างเอกสาร — ถ้าเปลี่ยน (ตัวเลือก/ข้อมูลที่กรอก/ไฟล์แนบ/ไฟล์ต้นฉบับ) ต้องสร้างใหม่"""
+    comp = sorted(source_key(items[c]["path"]) for c in companions if c in items and c != iid and items[c]["path"].exists())
+    return json.dumps([doctype, source_key(items[iid]["path"]), options, extra or {}, comp], sort_keys=True, ensure_ascii=False)
+
+
+def from_preview(doctype: str, job: Job, options: dict, extra: dict, companions: list, fmt: str):
+    """ใช้ไฟล์ที่สร้างไว้ตอนดูตัวอย่าง (ถ้ายังตรงกับตัวเลือกปัจจุบัน) — คัดลอกไปปลายทาง ไม่ต้องเปิด Word ซ้ำ"""
+    c = preview_cache.get(job.id)
+    if not c or not c["result"].get("ok") or c["sig"] != preview_sig(doctype, job.id, options, extra, companions):
+        return None
+    ext = "pdf" if fmt == "pdf" else "docx"
+    outs = c["result"].get("outputs", [])
+    if not outs or not all(o.get(ext) and Path(o[ext]).exists() for o in outs):
+        return None
+    job.outdir.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for o in outs:
+        dst = unique(job.outdir / Path(o[ext]).name)
+        shutil.copy2(o[ext], dst)
+        copied.append({**o, "docx": dst if ext == "docx" else None, "pdf": dst if ext == "pdf" else None, "doc": None})
+    return {**c["result"], "outputs": copied}
+
+
+def convert(doctype: str, ids: list, settings: dict, extra: dict = None, companions=()) -> dict:
     dt = registry.get(doctype)
     chosen = Path(settings["outdir"]) if settings.get("dest") == "folder" and settings.get("outdir") else None
     jobs = [Job(i, items[i]["path"], chosen or (items[i]["path"].parent if items[i]["origin"] == "path" else DOWNLOADS))
             for i in ids if i in items and items[i]["doctype"] == doctype]
-    results = dt.convert(jobs, settings["options"].get(doctype, {}), bool(settings.get("pdf")), extra or {},
-                         log=lambda m: None)
+    opts, fmt, extra = settings["options"].get(doctype, {}), settings.get("format"), extra or {}
+    comps = [c for c in companions if c in items]
+    results, todo = {}, []
+    for j in jobs:
+        r = None if j.id in comps else from_preview(doctype, j, opts, extra.get(j.id), comps, fmt)
+        if r:
+            results[j.id] = r
+        else:
+            todo.append(j)
+    if any(j.id not in comps for j in todo):        # มีหนังสือที่ยังไม่ได้ดูตัวอย่าง (หรือเปลี่ยนตัวเลือกหลังดู) -> แปลงด้วย Word
+        results.update(dt.convert(todo, opts, fmt == "pdf", extra, log=lambda m: None))
     out = {}
     for jid, r in results.items():
         outputs = [{k: str(o.get(k) or "") for k in ("kind", "label", "docx", "pdf", "doc")} for o in r.get("outputs", [])]
@@ -181,9 +238,42 @@ def convert(doctype: str, ids: list, settings: dict, extra: dict = None) -> dict
                 if f:
                     allowed.update({Path(f), Path(f).parent})
         out[jid] = {"ok": bool(r.get("ok")), "error": r.get("error", ""), "notes": r.get("notes", []), "outputs": outputs,
-                    "docx": next((o["docx"] for o in outputs if o["docx"]), "")}
+                    "docx": next((f for o in outputs for f in (o["docx"], o["pdf"]) if f), "")}
     remember_converted([items[i]["path"] for i, r in out.items() if r["ok"] and items[i]["origin"] == "path"])
     return out
+
+
+def preview(doctype: str, iid: str, options: dict, extra: dict, companions=()) -> dict:
+    """ปุ่ม "ดูตัวอย่าง": สร้าง PDF ชั่วคราว (ไม่บันทึกลงโฟลเดอร์ผลลัพธ์) แล้วคืนลิงก์ให้หน้าจอแสดง"""
+    if iid not in items or items[iid]["doctype"] != doctype:
+        raise ValueError("ไม่พบไฟล์ในรายการ")
+    dt = registry.get(doctype)
+    opts = {**load_settings()["options"].get(doctype, {}), **(options or {})}
+    with preview_lock:
+        drop_preview(iid)                                  # ตัวอย่างเดิมของรายการนี้
+        outdir = PREVIEWS / iid / uuid.uuid4().hex[:8]
+        outdir.mkdir(parents=True, exist_ok=True)
+        comp = [Job(c, items[c]["path"], outdir) for c in companions if c in items and c != iid]
+        r = dt.preview(Job(iid, items[iid]["path"], outdir), opts, extra or {}, log=lambda m: None, companions=comp)
+        preview_cache[iid] = {"sig": preview_sig(doctype, iid, opts, extra, list(companions)), "dir": outdir, "result": r}
+        pages = []
+        for o in r.get("outputs", []):
+            if o.get("pdf") and Path(o["pdf"]).exists():
+                key = uuid.uuid4().hex[:12]
+                preview_files[key] = (iid, Path(o["pdf"]))
+                pages.append({"kind": o.get("kind", ""), "label": o.get("label", ""), "url": f"/preview/{key}/{quote(Path(o['pdf']).name)}"})
+    if pages:
+        return {"ok": True, "error": "", "notes": r.get("notes", []), "pages": pages}
+    return {"ok": False, "error": r.get("error") or "สร้างตัวอย่างไม่ได้ — ต้องใช้ Microsoft Word ในเครื่อง",
+            "notes": r.get("notes", []), "pages": []}
+
+
+def drop_preview(iid: str):
+    c = preview_cache.pop(iid, None)
+    if c:
+        shutil.rmtree(c["dir"].parent, ignore_errors=True)
+    for k in [k for k, (owner, _) in preview_files.items() if owner == iid]:
+        del preview_files[k]
 
 
 def is_allowed(p: Path) -> bool:
@@ -206,9 +296,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code=200, body=b"", ctype="application/json; charset=utf-8"):
+    def _send(self, code=200, body=b"", ctype="application/json; charset=utf-8", headers=None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -233,6 +325,12 @@ class Handler(BaseHTTPRequestHandler):
         last_ping[0] = time.time()
         if url.path == "/api/init":
             return self._json(init_payload())
+        if url.path.startswith("/preview/"):
+            f = preview_files.get(url.path.split("/")[2], ("", None))[1]      # /preview/<รหัส>/<ชื่อไฟล์>.pdf
+            if not f or not f.exists():
+                return self._json({"error": "not found"}, 404)
+            return self._send(200, f.read_bytes(), "application/pdf",
+                              {"Content-Disposition": f"inline; filename*=UTF-8''{quote(f.name)}"})
         if url.path == "/api/downloads_count":
             return self._json({"count": len(new_in_downloads(q.get("doctype", [""])[0]))})
         return self._json({"error": "not found"}, 404)
@@ -244,6 +342,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "forbidden"}, 403)
         last_ping[0] = time.time()
         n = int(self.headers.get("Content-Length") or 0)
+        if url.path == "/api/upload_raw":       # ไฟล์ที่ลากมาวาง: รับเป็นไบต์ตรง ๆ เขียนลงดิสก์ทีละส่วน (ไฟล์ใหญ่ไม่กินหน่วยความจำ)
+            try:
+                return self._json(self.upload_raw(q, n))
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
         try:
             data = json.loads(self.rfile.read(n) or b"{}") if n else {}
         except ValueError:
@@ -252,6 +355,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.route(url.path, data))
         except Exception as e:  # ส่งข้อผิดพลาดกลับไปแสดงบนหน้าจอ
             return self._json({"error": str(e)}, 500)
+
+    def upload_raw(self, q, n: int) -> dict:
+        doctype = q.get("doctype", [""])[0]
+        registry.get(doctype)
+        name = Path(q.get("name", ["file"])[0] or "file").name
+        d = UPLOADS / uuid.uuid4().hex[:8]
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / name, "wb") as f:
+            left = n
+            while left > 0:
+                chunk = self.rfile.read(min(left, 1 << 20))
+                if not chunk:
+                    break
+                f.write(chunk)
+                left -= len(chunk)
+        return {"item": register(d / name, "upload", doctype)}
 
     def route(self, path, data):
         doctype = data.get("doctype") or ""
@@ -275,16 +394,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/remove":
             for i in data.get("ids", []):
                 items.pop(i, None)
+                with preview_lock:
+                    drop_preview(i)
             return {"ok": True}
         if path == "/api/settings":
             return {"settings": update_settings(data)}
+        if path == "/api/preview":
+            return preview(doctype, data.get("id") or "", data.get("options") or {}, data.get("extra") or {},
+                           data.get("companions") or [])
         if path == "/api/convert":
             s = load_settings()
             patch = data.get("settings", {})
             s.update({k: v for k, v in patch.items() if k in DEFAULT_SETTINGS and k != "options"})
             for dt_id, o in (patch.get("options") or {}).items():
                 s["options"][dt_id] = {**s["options"].get(dt_id, {}), **o}
-            return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {})}
+            return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {},
+                                       data.get("companions") or [])}
         if path in ("/api/open", "/api/reveal"):
             p = Path(data.get("path") or "")
             if not p.exists() or not is_allowed(p):
@@ -313,6 +438,8 @@ def app_window_open() -> bool:
 
 
 def main():
+    shutil.rmtree(PREVIEWS, ignore_errors=True)       # ตัวอย่างที่ค้างจากครั้งก่อน
+    reset_checks()
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:

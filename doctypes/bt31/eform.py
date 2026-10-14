@@ -17,7 +17,7 @@ from core.store import JsonFile
 from core.text import NB, THAI, clean
 
 from .layout import render_letters
-from .letter import DATA, Letter, fix_text, lang_label, load_courses, output_stem, save_courses
+from .letter import DATA, Letter, fix_text, subject_of, use_attachment, lang_label, load_courses, output_stem, save_courses
 
 SIGNERS = JsonFile(DATA / "signers.json", legacy=BASE / "signers.json")               # ผู้ลงนาม {"th": [...], "en": [...]}
 TRANSLATIONS = JsonFile(DATA / "translations.json", legacy=BASE / "translations.json", sort_keys=True)
@@ -294,7 +294,7 @@ def build_letters_th(d: dict, kinds: list, today=None, inform_supervisor=True) -
     if "invite" in kinds:
         L = Letter(kind="invite", lang="th", address=list(ADDRESS_TH), rows=list(rows),
                       signature=["ขอแสดงความนับถือ"] + signers, contact=list(contact))
-        L.header = {**header_common, "subject": "เรื่อง ขอเรียนเชิญเป็นอาจารย์พิเศษ", "to": f"เรียน {who}"}
+        L.header = {**header_common, "subject": subject_of(L), "to": f"เรียน {who}"}
         L.body = [clean(f"บัณฑิตวิทยาลัย มหาวิทยาลัยมหิดล และคณะกรรมการบริหารหลักสูตร {d['program']} "
                            f"{track_text_th(d)} {d['faculty']} "
                            f"ได้พิจารณาเห็นว่าท่านเป็นผู้ทรงความรู้และมีประสบการณ์ในการสอน")]
@@ -310,7 +310,7 @@ def build_letters_th(d: dict, kinds: list, today=None, inform_supervisor=True) -
         else:
             L = Letter(kind="approve", lang="th", address=list(ADDRESS_TH), rows=list(rows),
                           signature=["ขอแสดงความนับถือ"] + signers, contact=list(contact))
-            L.header = {**header_common, "subject": "เรื่อง ขออนุมัติอาจารย์พิเศษ", "to": f"เรียน {d['approver']}"}
+            L.header = {**header_common, "subject": subject_of(L), "to": f"เรียน {d['approver']}"}
             L.body = [clean(f"บัณฑิตวิทยาลัย มหาวิทยาลัยมหิดล และคณะกรรมการบริหารหลักสูตร {d['program']} "
                                f"{d['faculty']} มีความประสงค์ขอเรียนเชิญ {who} จาก{d['workplace']} "
                                f"เป็นอาจารย์พิเศษสอนนักศึกษาบัณฑิตวิทยาลัย หลักสูตร {d['program']} จำนวน {d['students']}")]
@@ -429,7 +429,7 @@ def build_letters_en(d: dict, kinds: list, en: dict, today=None) -> tuple:
     letters = []
     if "invite" in kinds:
         L = Letter(kind="invite", lang="en", address=["Mahidol University"], rows=list(rows), signature=signature)
-        L.header = {**header, "to": f"Dear {who}"}
+        L.header = {**header, "subject": subject_of(L), "to": f"Dear {who}"}
         L.body = [f"The Faculty of Graduate Studies, Mahidol University would like to invite you to give lecture "
                   f"for our graduate students in {program} at the {faculty}."]
         contact = f" If you have any questions do not hesitate to contact {en['contact']} in {program} at the " \
@@ -443,7 +443,7 @@ def build_letters_en(d: dict, kinds: list, en: dict, today=None) -> tuple:
             notes.append("แบบฟอร์มระบุว่าไม่ต้องขออนุมัติผู้บังคับบัญชา — ไม่ได้สร้างหนังสือขออนุมัติ")
         else:
             L = Letter(kind="approve", lang="en", address=["Mahidol University"], rows=list(rows), signature=signature)
-            L.header = {**header, "to": f"Dear {en['approver']}"}
+            L.header = {**header, "subject": subject_of(L), "to": f"Dear {en['approver']}"}
             L.body = [f"According to our invitation to {who}, {en['workplace']}, to give a lecture for our graduate "
                       f"students in {program} at the {faculty}. We would like to request your approval to allow "
                       f"{who} to give lecture as outlined below."]
@@ -483,7 +483,17 @@ def inspect(path: Path) -> dict:
     return info
 
 
-def convert(path: Path, outdir=None, pdf=False, want_approve=False, en=None, log=print) -> dict:
+def is_form(path: Path) -> bool:
+    """เป็น PDF หน้า บฑ.31 หรือไม่ (PDF อื่นในหน้าจอถือเป็นตารางสอนที่แนบ)"""
+    try:
+        d = read_pdf(Path(path))
+    except Exception:
+        return False
+    return bool(d["name"] and d["course_code"])
+
+
+def convert(path: Path, outdir=None, pdf=False, want_approve=False, en=None, log=print, fmt=None,
+            attachment=False, attach_files=()) -> dict:
     """en: ข้อมูลภาษาอังกฤษที่ผู้ใช้กรอก/แก้ {key: value} (เฉพาะคำร้องขอหนังสือภาษาอังกฤษ)
     คืน {'src', 'ok', 'outputs': [{'kind','docx','pdf'}], 'notes', 'error'}"""
     path = Path(path)
@@ -517,12 +527,17 @@ def convert(path: Path, outdir=None, pdf=False, want_approve=False, en=None, log
     if d["course_en"] and d["course_code"]:
         courses[d["course_code"]] = d["course_en"]
         save_courses(courses)
+    if attachment:
+        for _, L in letters:
+            use_attachment(L)
+        notes = [n for n in notes if not n.startswith(("สถานที่สอน", "PLACE"))]     # แถวสถานที่เป็น "ตามเอกสารแนบ" แล้ว
     od = Path(outdir) if outdir else path.parent
-    entries = [dict(src=path, letter=L, outdir=od, stem=output_stem(L), notes=[]) for _, L in letters]
-    for r in render_letters(entries, pdf=pdf, log=log):
+    entries = [dict(src=path, letter=L, outdir=od, stem=output_stem(L), notes=[], attach=list(attach_files))
+               for _, L in letters]
+    for r in render_letters(entries, pdf=pdf, log=log, fmt=fmt):
         res["outputs"].append({"kind": r["kind"], "docx": r["docx"], "pdf": r["pdf"], "doc": r["doc"], "error": r["error"]})
     res["notes"] = notes
-    res["ok"] = bool(res["outputs"]) and all(o["docx"] for o in res["outputs"])
+    res["ok"] = bool(res["outputs"]) and all(o["docx"] or o["pdf"] for o in res["outputs"])
     if not res["ok"]:
         res["error"] = next((o["error"] for o in res["outputs"] if o["error"]), "สร้างไฟล์ไม่สำเร็จ")
     return res

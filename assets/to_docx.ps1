@@ -1,5 +1,5 @@
 # Convert Word-HTML letters to .docx (and optional .pdf) with Microsoft Word.
-# -Jobs: JSON file  [{ "in": "...htm", "docx": "...docx", "pdf": "...pdf" (optional) }]
+# -Jobs: JSON file  [{ "in": "...htm", "docx": "...docx" (optional), "pdf": "...pdf" (optional) }]
 # Prints one line per job:  OK<TAB>in   or   ERR<TAB>in<TAB>message
 param([Parameter(Mandatory = $true)][string]$Jobs)
 
@@ -23,7 +23,7 @@ try {
                 }
             }
             try { $doc.ActiveWindow.View.Type = 3 } catch {}   # Print Layout
-            $doc.SaveAs2($job.docx, 16)                         # wdFormatXMLDocument
+            if ($job.docx) { $doc.SaveAs2($job.docx, 16) }      # wdFormatXMLDocument
             if ($job.pdf) { $doc.SaveAs2($job.pdf, 17) }        # wdFormatPDF
             Write-Output ("OK`t" + $job.in)
         }
