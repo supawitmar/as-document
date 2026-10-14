@@ -19,7 +19,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 |---|---|
 | [INSTALL.md](INSTALL.md) | **ติดตั้งบนเครื่องอื่น** — ต้องมี Word + Python 3.9+ + ฟอนต์ TH Sarabun New/PSK (คู่มือมีลิงก์และขั้นตอนติดตั้งครบ) |
 | [HANDOFF.md](HANDOFF.md) | ผู้ดูแล/พัฒนาต่อ — โครงสร้างระบบ กฎการจัดรูปแบบ ข้อจำกัด และจุดที่ต้องแก้บ่อย |
-| [doctypes/README.md](doctypes/README.md) | เพิ่ม/สอนรูปแบบเอกสารประเภทใหม่ |
+| [doctypes/README.md](doctypes/README.md) | เพิ่ม/สอนรูปแบบเอกสารประเภทใหม่ และปล่อยเป็น patch ให้เครื่องอื่น |
+
+**อัปเดต:** เมื่อมีประเภทเอกสารใหม่หรือแก้รูปแบบ โปรแกรมจะแสดงแถบ "มีอัปเดตใหม่" — กด **อัปเดตเลย** ครั้งเดียว
 | README.md (ไฟล์นี้) | วิธีใช้งาน |
 
 ## วิธีใช้

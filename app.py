@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from core import ASSETS, BASE, registry
+from core import ASSETS, BASE, registry, update
 from core.doctype import Job
 from core.render import unique
 
@@ -45,6 +45,7 @@ preview_lock = threading.Lock()
 preview_files = {}  # รหัสลิงก์ -> (รหัสรายการ, ไฟล์ PDF ตัวอย่าง)
 preview_cache = {}  # รหัสรายการ -> {"sig", "dir", "result"}: ผลจากปุ่มดูตัวอย่าง (มีทั้ง .docx และ .pdf) ใช้ซ้ำตอนบันทึก
 last_ping = [0.0]
+restart = threading.Event()   # อัปเดตแล้ว: เปิดโปรแกรมใหม่ แล้วปิดตัวนี้
 FILES = [a for a in sys.argv[1:] if not a.startswith("--")]
 
 
@@ -376,6 +377,14 @@ class Handler(BaseHTTPRequestHandler):
         doctype = data.get("doctype") or ""
         if path == "/api/ping":
             return {"ok": True}
+        if path == "/api/update/check":
+            return update.check()
+        if path == "/api/update/apply":
+            r = update.apply(log=lambda m: None)
+            relaunch = "--serve" not in sys.argv
+            if relaunch:
+                threading.Timer(1.0, relaunch_app).start()
+            return {**r, "relaunch": relaunch}
         if path == "/api/pick_files":
             picker = registry.get(doctype).pickers.get(data.get("pick"), {})
             return {"items": [register(Path(p), "path", doctype) for p in ask("files", str(DOWNLOADS), picker)]}
@@ -433,6 +442,13 @@ def find_edge():
     return None
 
 
+def relaunch_app():
+    """หลังอัปเดต: เปิดโปรแกรมรุ่นใหม่ (หน้าต่างใหม่) แล้วให้ตัวนี้ปิดเอง"""
+    pyw = Path(sys.executable).with_name("pythonw.exe")
+    subprocess.Popen([str(pyw if pyw.exists() else sys.executable), str(BASE / "app.py")], cwd=str(BASE))
+    restart.set()
+
+
 def app_window_open() -> bool:
     return bool(ctypes.windll.user32.FindWindowW(None, APP_WINDOW_TITLE))
 
@@ -459,8 +475,7 @@ def main():
     # อยู่จนกว่าหน้าต่างแอปจะปิด (ตรวจจากชื่อหน้าต่าง) หรือหน้าเว็บหยุดส่งสัญญาณนาน
     last_ping[0] = time.time()
     seen = False
-    while True:
-        time.sleep(3)
+    while not restart.wait(3):
         if app_window_open():
             seen = True
             continue

@@ -36,9 +36,26 @@ try {
 
     Write-Host "3) Copying to $Dest"
     New-Item -ItemType Directory -Path $Dest -Force | Out-Null
-    # The archive never contains the per-computer files (they are in .gitignore), so copying over keeps them.
-    Get-ChildItem -LiteralPath $src.FullName -Force | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $Dest -Recurse -Force
+    # Existing install: let the program's updater copy the files, so data this computer learned or edited
+    # (doctypes/*/data/*.json) is merged instead of overwritten. Falls back to a plain copy (new install / no Python).
+    $merged = $false
+    if (Test-Path (Join-Path $Dest "app.py")) {
+        foreach ($cand in @(@("py", "-3"), @("python"))) {
+            try {
+                $exe = $cand[0]; $extra = @($cand | Select-Object -Skip 1)
+                Push-Location $src.FullName
+                & $exe @extra -m core.update --tree $src.FullName --dest $Dest
+                $ok = ($LASTEXITCODE -eq 0)
+                Pop-Location
+                if ($ok) { $merged = $true; break }
+            } catch { Pop-Location }
+        }
+    }
+    if (-not $merged) {
+        # The archive never contains the per-computer files (they are in .gitignore), so copying over keeps them.
+        Get-ChildItem -LiteralPath $src.FullName -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $Dest -Recurse -Force
+        }
     }
     Get-ChildItem -LiteralPath $Dest -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
 } catch {

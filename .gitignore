@@ -4,6 +4,7 @@ converted.json
 translations.json
 doctypes/*/data/translations.json
 *.migrated
+.update/
 
 # shortcut สร้างโดย ติดตั้ง.bat (path ต่างกันในแต่ละเครื่อง)
 *.lnk
