@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from core import ASSETS, BASE, registry, update
 from core.doctype import Job
-from core.render import unique
+from core.render import save_file
 
 WEB = BASE / "web"
 DOWNLOADS = Path.home() / "Downloads"
@@ -35,7 +35,7 @@ PREVIEWS = Path(tempfile.gettempdir()) / "fixletters_preview"
 TOKEN = secrets.token_urlsafe(16)
 APP_WINDOW_TITLE = "ระบบปรับเอกสาร"   # ต้องตรงกับ <title> ใน web/index.html
 DEFAULT_SETTINGS = {"format": "docx", "dest": "same", "outdir": "", "doctype": "", "options": {}}
-FORMATS = ("docx", "pdf")     # รูปแบบไฟล์ที่ส่งออก: Word อย่างเดียว หรือ PDF อย่างเดียว
+FORMATS = ("docx", "pdf", "both")     # รูปแบบไฟล์ที่ส่งออก: Word / PDF / Word + PDF
 
 items = {}          # id -> {"path": Path, "origin": "path"|"upload", "doctype": id}
 allowed = set()     # ไฟล์/โฟลเดอร์ที่อนุญาตให้เปิดจากหน้าเว็บ
@@ -205,17 +205,20 @@ def from_preview(doctype: str, job: Job, options: dict, extra: dict, companions:
     c = preview_cache.get(job.id)
     if not c or not c["result"].get("ok") or c["sig"] != preview_sig(doctype, job.id, options, extra, companions):
         return None
-    ext = "pdf" if fmt == "pdf" else "docx"
+    exts = {"pdf": ["pdf"], "both": ["docx", "pdf"]}.get(fmt, ["docx"])
     outs = c["result"].get("outputs", [])
-    if not outs or not all(o.get(ext) and Path(o[ext]).exists() for o in outs):
+    # ทุกฉบับต้องมีไฟล์ตามรูปแบบที่เลือกอย่างน้อยหนึ่งแบบ (ไฟล์ Word ที่จัดแล้วได้ PDF อย่างเดียว)
+    if not outs or not all(any(o.get(e) and Path(o[e]).exists() for e in exts) for o in outs):
         return None
     job.outdir.mkdir(parents=True, exist_ok=True)
-    copied = []
+    copied, notes = [], list(c["result"].get("notes", []))
     for o in outs:
-        dst = unique(job.outdir / Path(o[ext]).name)
-        shutil.copy2(o[ext], dst)
-        copied.append({**o, "docx": dst if ext == "docx" else None, "pdf": dst if ext == "pdf" else None, "doc": None})
-    return {**c["result"], "outputs": copied}
+        new = {**o, "docx": None, "pdf": None, "doc": None}
+        for e in exts:
+            if o.get(e) and Path(o[e]).exists():       # ชื่อซ้ำ = เขียนทับ (ฉบับปรับปรุง)
+                new[e] = save_file(Path(o[e]), job.outdir / Path(o[e]).name, notes, move=False)
+        copied.append(new)
+    return {**c["result"], "outputs": copied, "notes": notes}
 
 
 def convert(doctype: str, ids: list, settings: dict, extra: dict = None, companions=()) -> dict:
@@ -233,7 +236,7 @@ def convert(doctype: str, ids: list, settings: dict, extra: dict = None, compani
         else:
             todo.append(j)
     if any(j.id not in comps for j in todo):        # มีหนังสือที่ยังไม่ได้ดูตัวอย่าง (หรือเปลี่ยนตัวเลือกหลังดู) -> แปลงด้วย Word
-        results.update(dt.convert(todo, opts, fmt == "pdf", extra, log=lambda m: None))
+        results.update(dt.convert(todo, opts, "both" if fmt == "both" else fmt == "pdf", extra, log=lambda m: None))
     out = {}
     for jid, r in results.items():
         outputs = [{k: str(o.get(k) or "") for k in ("kind", "label", "docx", "pdf", "doc")} for o in r.get("outputs", [])]

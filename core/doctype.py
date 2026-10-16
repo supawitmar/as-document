@@ -20,14 +20,15 @@ hub ไม่รู้จักรายละเอียดของเอก�
     kind                  ชื่อเรียกเอกสาร
     subtitle, subtitle2   บรรทัดรายละเอียดใต้ชื่อไฟล์
     lang, lang_label, lang_source   ป้ายภาษา ('th' แดง / 'en' น้ำเงิน)
-    outputs_preview       [{'name': ชื่อไฟล์ที่จะได้, 'requires': ชื่อตัวเลือกที่ต้องเปิด (ไม่บังคับ)}]
+    outputs_preview       [{'name': ชื่อไฟล์ที่จะได้, 'requires': ชื่อตัวเลือกที่ต้องเปิด (ไม่บังคับ),
+                            'ext': นามสกุลที่ได้เสมอไม่ขึ้นกับรูปแบบที่เลือก เช่น "pdf" (ไม่บังคับ)}]
     fields, fields_title, fields_status
                           ช่องให้ผู้ใช้กรอกก่อนแปลง [{'key','label','hint','value','check','placeholder','requires'}]
                           check: 'english' = ต้องเป็นภาษาอังกฤษ / 'required' = ห้ามว่าง
 
 ผล convert(jobs, ...) -> {job.id: {'ok', 'error', 'notes', 'outputs': [{'kind','label','docx','pdf','doc'}]}}
     pdf=True  ผู้ใช้เลือกรูปแบบไฟล์ "PDF" -> ส่งออก .pdf อย่างเดียว; False = Word (.docx) อย่างเดียว
-    pdf="both" (ใช้ตอนดูตัวอย่าง) สร้างทั้งสองแบบในรอบเดียว — hub เก็บไว้แล้วคัดลอกออกตอนผู้ใช้กดบันทึก ไม่ต้องแปลงซ้ำ
+    pdf="both" ผู้ใช้เลือก "Word + PDF" และตอนดูตัวอย่าง (สร้างทั้งสองแบบในรอบเดียว — hub เก็บไว้แล้วคัดลอกออกตอนบันทึก)
               (ส่งต่อให้ core.render.render(..., fmt=...) ตามค่านี้)
 
 preview(job, ...) -> ผลแบบเดียวกับ convert ของ job นั้น โดยต้องมีไฟล์ 'pdf' ให้หน้าจอแสดง

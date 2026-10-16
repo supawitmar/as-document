@@ -6,16 +6,18 @@
     layout.py   รูปแบบหน้ากระดาษ (Word HTML) ตามไฟล์ตัวอย่าง
     export.py   ทางเข้า 1: ไฟล์ Export (xx).doc จากระบบ
     eform.py    ทางเข้า 2: PDF หน้า บฑ.31 (e-Form)
+    wordfile.py ทางเข้า 3: ไฟล์ Word (.docx) ที่จัดรูปแบบแล้วนำไปแก้ — แปลงเป็น PDF ตามต้นฉบับ
     data/       courses.json (ชื่อวิชาภาษาอังกฤษ), signers.json (ผู้ลงนาม), translations.json (เฉพาะเครื่อง)
 """
+import zipfile
 from pathlib import Path
 
 from core.doctype import DocType
 
-from . import eform, export
+from . import eform, export, wordfile
 from .letter import load_courses, save_courses, learn_course, short_label
 
-EXPORT_EXTS = [".doc", ".htm", ".html"]
+EXPORT_EXTS = [".doc", ".htm", ".html", *wordfile.EXTS]
 APPROVE_TOGGLE = "want_approve"
 ATTACHMENT = "see_attachment"     # สอนมากกว่า 1 รายการ -> รายละเอียดตามเอกสารแนบ
 
@@ -29,14 +31,12 @@ class Bt31(DocType):
     order = 10
     options = {APPROVE_TOGGLE: False, ATTACHMENT: False, "mode": "export"}
     pickers = {
-        "export": {"title": "เลือกไฟล์ Export", "filters": [("ไฟล์ Export", "*.doc *.htm *.html"), ("ทุกไฟล์", "*.*")]},
+        "export": {"title": "เลือกไฟล์ Export หรือไฟล์ Word ที่จัดแล้ว",
+                   "filters": [("ไฟล์ Export / Word", "*.doc *.htm *.html *.docx"), ("ทุกไฟล์", "*.*")]},
         "pdf": {"title": "เลือกไฟล์ PDF หน้า บฑ.31", "filters": [("PDF หน้า บฑ.31", "*.pdf"), ("ทุกไฟล์", "*.*")]},
         "schedule": {"title": "เลือกไฟล์ตารางสอน (PDF)", "filters": [("ตารางสอน PDF", "*.pdf"), ("ทุกไฟล์", "*.*")]},
     }
-    downloads = {"glob": "Export*.doc", "label": "ไฟล์ใหม่ใน Downloads",
-                 "title": "ดึงไฟล์ Export ที่ดาวน์โหลดภายใน 3 วัน และจัดลงช่องให้อัตโนมัติ",
-                 "empty": "ไม่พบไฟล์ Export ใหม่ใน Downloads"}
-    drop_hint = "รองรับไฟล์ .doc จากระบบ หรือ PDF หน้า บฑ.31"
+    drop_hint = "รองรับไฟล์ .doc จากระบบ, ไฟล์ Word (.docx) ที่จัดแล้ว หรือ PDF หน้า บฑ.31"
     ui = {
         "modes": [
             {"id": "export", "label": "ไฟล์ Export จากระบบ (.doc)", "icon": "upload",
@@ -58,11 +58,13 @@ class Bt31(DocType):
             {"id": "invite", "mode": "export", "num": 1, "title": "หนังสือเชิญ",
              "desc": "ไฟล์ Export หนังสือเชิญเป็นอาจารย์พิเศษ — ภาษาไทยหรืออังกฤษ", "icon": "invite", "color": "blue",
              "accept": EXPORT_EXTS, "pick": "export", "pick_label": "เลือกไฟล์",
-             "zone_title": "ลากไฟล์หนังสือเชิญมาวางที่นี่", "zone_desc": "ไฟล์ .doc ที่ดาวน์โหลดจากระบบ"},
+             "zone_title": "ลากไฟล์หนังสือเชิญมาวางที่นี่",
+             "zone_desc": "ไฟล์ .doc จากระบบ หรือไฟล์ Word ที่จัดแล้วนำไปแก้ (.docx → PDF)"},
             {"id": "approve", "mode": "export", "num": 2, "title": "หนังสือขออนุมัติ",
              "desc": "ไฟล์ Export หนังสือขออนุมัติอาจารย์พิเศษ — ภาษาไทยหรืออังกฤษ", "icon": "approve", "color": "violet",
              "accept": EXPORT_EXTS, "pick": "export", "pick_label": "เลือกไฟล์",
-             "zone_title": "ลากไฟล์หนังสือขออนุมัติมาวางที่นี่", "zone_desc": "ไฟล์ .doc ที่ดาวน์โหลดจากระบบ",
+             "zone_title": "ลากไฟล์หนังสือขออนุมัติมาวางที่นี่",
+             "zone_desc": "ไฟล์ .doc จากระบบ หรือไฟล์ Word ที่จัดแล้วนำไปแก้ (.docx → PDF)",
              "toggle": {"option": APPROVE_TOGGLE, "label": "ต้องการหนังสือขออนุมัติ"}, "gate": APPROVE_TOGGLE,
              "gate_note": "ติ๊ก “ต้องการหนังสือขออนุมัติ” เพื่อเปิดใช้ช่องนี้ · ถ้าไม่ติ๊ก หนังสือเชิญภาษาไทยจะตัดประโยค "
                           "“ทั้งนี้ได้แจ้งให้ผู้บังคับบัญชาของท่านทราบแล้ว” ออก"},
@@ -93,6 +95,13 @@ class Bt31(DocType):
         return {"ok": True, "slot": "schedule", "kind": "ตารางสอน", "kind_code": "schedule",
                 "subtitle": f"ตารางสอน {pages} หน้า — ต่อท้ายหนังสือทุกฉบับในรอบนี้", "outputs_preview": []}
 
+    @staticmethod
+    def word_kind(path: Path) -> str:
+        try:
+            return wordfile.classify(path)
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+            return "other"           # เปิดไม่ได้ — ให้ wordfile.inspect แจ้งเหตุผล
+
     def is_schedule(self, path: Path) -> bool:
         return self.is_pdf(path) and not eform.is_form(path)
 
@@ -115,6 +124,17 @@ class Bt31(DocType):
                                   **({"requires": APPROVE_TOGGLE} if f["key"] == "approver" else {})}
                                  for f in info["en_fields"]]
             return out
+        if wordfile.is_word_file(path) and self.word_kind(path) == "export":    # ไฟล์ Export ที่ Save As เป็น .docx
+            info = export.inspect(wordfile.as_export(path))
+            return {**info, "slot": "approve" if info.get("kind_code") == "approve" else "invite",
+                    "subtitle": (("Dear " if info.get("lang") == "en" else "เรียน ") + info["to"]) if info.get("to") else "",
+                    "subtitle2": wordfile.EXPORT_NOTE,
+                    "outputs_preview": [{"name": n} for n in info.get("outputs_preview", [])]}
+        if wordfile.is_word_file(path):
+            info = wordfile.inspect(path)
+            return {**info, "slot": "approve" if info.get("kind_code") == "approve" else "invite",
+                    "subtitle": (("Dear " if info.get("lang") == "en" else "เรียน ") + info["to"]) if info.get("to") else "",
+                    "outputs_preview": [{"name": n, "ext": "pdf"} for n in info.get("outputs_preview", [])]}
         info = export.inspect(path)
         to = info.get("to")
         return {**info, "slot": "approve" if info.get("kind_code") == "approve" else "invite",
@@ -129,7 +149,7 @@ class Bt31(DocType):
         jobs = [j for j in jobs if not self.is_schedule(j.path)]
         no_file = ["ยังไม่ได้แนบไฟล์ตารางสอน — หนังสือระบุ “รายละเอียดตามเอกสารแนบ” แต่ไม่มีเอกสารแนบ"] \
             if attach and not files else []
-        # เลือก PDF = ได้ไฟล์ PDF อย่างเดียว / Word = .docx อย่างเดียว / "both" = ตอนดูตัวอย่าง (hub เก็บไว้ใช้ตอนบันทึก)
+        # เลือก PDF = ได้ไฟล์ PDF อย่างเดียว / Word = .docx อย่างเดียว / "both" = Word + PDF (และตอนดูตัวอย่าง)
         fmt = "both" if pdf == "both" else "pdf" if pdf else "docx"
         out = {}
         # PDF หน้า บฑ.31: สร้างหนังสือจากข้อมูลในแบบฟอร์ม
@@ -140,12 +160,23 @@ class Bt31(DocType):
                          "outputs": [{"kind": o["kind"], "label": short_label(o["kind"]), "docx": o["docx"],
                                       "pdf": o["pdf"], "doc": o["doc"]} for o in r["outputs"]]}
 
-        exports = [j for j in jobs if not self.is_pdf(j.path)]
+        # ไฟล์ Word: ไฟล์ Export ที่ Save As เป็น .docx → จัดรูปแบบเหมือนไฟล์ Export / แบบอื่น → PDF ตามต้นฉบับ (ได้ PDF เสมอ)
+        sources = {j.id: Path(j.path) for j in jobs if not self.is_pdf(j.path)}
+        for j in jobs:
+            if wordfile.is_word_file(j.path) and self.word_kind(j.path) == "export":
+                sources[j.id] = wordfile.as_export(j.path)
+        for j in (j for j in jobs if wordfile.is_word_file(j.path) and sources[j.id].suffix.lower() != ".doc"):
+            r = wordfile.convert(j.path, outdir=j.outdir, attach_files=files, log=log)
+            out[j.id] = {"ok": bool(r["pdf"]), "error": r["error"], "notes": r["notes"] + (no_file if r["pdf"] else []),
+                         "outputs": [{"kind": r["kind"], "label": "", "docx": None, "pdf": r["pdf"], "doc": None}]
+                         if r["pdf"] else []}
+
+        exports = [j for j in jobs if not self.is_pdf(j.path) and not wordfile.is_word_file(sources[j.id])]
         # เรียนรู้ชื่อวิชาภาษาอังกฤษจากทุกไฟล์ก่อน เผื่อแยกแปลงหลายกลุ่ม (ปลายทางต่างกัน)
         courses = load_courses()
         for j in exports:
             try:
-                learn_course(export.parse(export.read_source(j.path)), courses)
+                learn_course(export.parse(export.read_source(sources[j.id])), courses)
             except OSError:
                 pass
         save_courses(courses)
@@ -153,7 +184,7 @@ class Bt31(DocType):
         for j in exports:
             groups.setdefault(j.outdir, []).append(j)
         for dest, group in groups.items():
-            by_path = {Path(j.path).resolve(): j.id for j in group}
+            by_path = {sources[j.id].resolve(): j.id for j in group}
             # ไม่ติ๊ก "ต้องการหนังสือขออนุมัติ" = ไม่ต้องขออนุมัติผู้บังคับบัญชา -> ตัดประโยคแจ้งผู้บังคับบัญชาในหนังสือเชิญ
             for r in export.convert(list(by_path), outdir=dest, log=log, inform_supervisor=want, fmt=fmt,
                                      attachment=attach, attach_files=files):

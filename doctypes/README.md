@@ -69,7 +69,7 @@ python tools/learn.py inspect "doctypes/<รหัส>/samples/<ฉบับจ�
 |---|---|
 | `core.text` | `read_source` (อ่านไฟล์ export ทุก encoding), `to_lines`, `paragraphs`, `clean`, `safe_stem` |
 | `core.wordhtml` | `paragraph`, `label_table` (ตาราง ป้าย : ค่า), `signature_block` (บล็อกลายมือชื่อวัดด้วยฟอนต์จริง), `font_css`, `wrap_document` (A4 ตาม `assets/word_head.html` หรือส่ง head ของตัวเอง) |
-| `core.render` | `render(entries)` แปลง Word HTML → .docx/.pdf ด้วย Word ทีเดียวทั้งชุด, ฝังโลโก้, ไม่เขียนทับไฟล์เดิม |
+| `core.render` | `render(entries)` แปลง Word HTML → .docx/.pdf ด้วย Word ทีเดียวทั้งชุด, ฝังโลโก้, ชื่อซ้ำเขียนทับ (ไฟล์เปิดค้าง = ชื่อใหม่) |
 | `core.store` | `JsonFile` อ่าน/เขียนไฟล์ข้อมูล JSON |
 
 ### 4. ตรวจผลกับตัวอย่าง

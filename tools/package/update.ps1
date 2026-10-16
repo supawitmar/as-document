@@ -135,7 +135,7 @@ Write-Host "4) ตรวจไลบรารี (pymupdf, pillow)"
 & $py -c "import pymupdf, PIL" 2>$null
 if ($LASTEXITCODE -ne 0) {
     Warn "ยังไม่มีไลบรารี — กำลังติดตั้ง (ต้องต่ออินเทอร์เน็ต)…"
-    & $py -m pip install --user --upgrade --disable-pip-version-check -q -r (Join-Path $App "requirements.txt")
+    & $py -m pip install --user --upgrade --disable-pip-version-check --no-warn-script-location -q -r (Join-Path $App "requirements.txt")
     & $py -c "import pymupdf, PIL" 2>$null
 }
 if ($LASTEXITCODE -eq 0) { Ok "ไลบรารีพร้อมใช้งาน" }

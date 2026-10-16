@@ -155,6 +155,7 @@ def apply_tree(src: Path, dest: Path = BASE, log=print) -> dict:
     pip = ""
     if req.exists() and _sha(req) != req_before:
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--upgrade", "--disable-pip-version-check",
+                            "--no-warn-script-location",
                             "-q", "-r", str(req)], capture_output=True, text=True)
         pip = "" if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
     log(f"อัปเดต {len(changed)} ไฟล์, รวมข้อมูล {len(merged)} ไฟล์, ลบ {len(removed)} ไฟล์")

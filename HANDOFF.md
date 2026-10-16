@@ -28,7 +28,7 @@
 │  ├─ registry.py        ค้นหาประเภทเอกสารใน doctypes/ อัตโนมัติ (โหลดไม่ได้ = ข้ามและแจ้งเตือน)
 │  ├─ text.py            อ่านไฟล์ export (UTF-8/UTF-16/cp874), ตัดบรรทัด/ย่อหน้า, ทำความสะอาดช่องว่าง
 │  ├─ wordhtml.py        ชิ้นส่วน Word HTML: ย่อหน้า, ตาราง ป้าย:ค่า, บล็อกลายมือชื่อ (วัดด้วยฟอนต์จริง), ห่อเอกสาร
-│  ├─ render.py          Word HTML → .docx/.pdf ผ่าน Word (assets/to_docx.ps1), โลโก้, ไม่เขียนทับไฟล์เดิม
+│  ├─ render.py          Word HTML → .docx/.pdf ผ่าน Word (assets/to_docx.ps1), โลโก้, ชื่อซ้ำ = เขียนทับ (ฉบับปรับปรุง)
 │  ├─ store.py           ไฟล์ข้อมูล JSON ของแต่ละประเภท (ย้ายจากที่เก็บรุ่นเดิมให้อัตโนมัติ)
 │  └─ update.py          อัปเดต: เลขเวอร์ชัน 1.x, เช็ก version.json บน GitHub, ติดตั้งทับ, รวมไฟล์ data แบบ 3 ทาง
 ├─ doctypes/
@@ -41,6 +41,7 @@
 │     ├─ layout.py       รูปแบบหน้ากระดาษ (Letter → Word HTML) ตามไฟล์ตัวอย่าง: DOC_TYPES, EN_TYPES, para(), build_html()
 │     ├─ export.py       อ่านไฟล์ Export → Letter → normalize()  + CLI
 │     ├─ eform.py        อ่าน PDF บฑ.31 → Letter (ไทย/อังกฤษ)  + CLI
+│     ├─ wordfile.py     ไฟล์ Word (.docx) ที่จัดแล้วนำไปแก้ → PDF ตามต้นฉบับ (core.render entry แบบ source)
 │     └─ data/           courses.json (รหัสวิชา → ชื่ออังกฤษ, เรียนรู้อัตโนมัติ), signers.json (ผู้ลงนาม th/en),
 │                        translations.json (คำแปลที่ผู้ใช้กรอก — เฉพาะเครื่อง ไม่อยู่ใน git)
 ├─ tools/learn.py        วัดรูปแบบจากไฟล์ตัวอย่าง (inspect) และเทียบผลลัพธ์กับตัวอย่างเป็นภาพ (compare)

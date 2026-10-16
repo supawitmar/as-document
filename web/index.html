@@ -291,6 +291,7 @@ main { display: flex; flex-direction: column; gap: 20px; }
 .seg button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 #docChecks .opt { padding-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
 #docChecks .opt + .opt { border-top: 0; padding-top: 2px; }
+.seg.fmt { grid-template-columns: 1fr 1fr 1.25fr; }
 .seg.fmt button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .seg.fmt button.on { color: var(--primary); }
 
@@ -320,7 +321,6 @@ main { display: flex; flex-direction: column; gap: 20px; }
 .pv-notes { padding: 8px 20px 0; }
 .modal-f { display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 20px; border-top: 1px solid var(--line); }
 .modal-f .hint { margin: 0; flex: 1; text-align: left; }
-.pv-save:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 640px) { .modal-f { flex-wrap: wrap; } .modal-f .hint { flex-basis: 100%; } }
 @media (max-width: 640px) { .modal { padding: 0; } .modal-box { height: 100vh; border-radius: 0; }
   .modal-h { flex-wrap: wrap; } .pv-tabs { order: 3; width: 100%; overflow-x: auto; } }
@@ -395,8 +395,9 @@ main { display: flex; flex-direction: column; gap: 20px; }
         <div id="docChecks"></div>
         <div class="label" style="margin-top:0">รูปแบบไฟล์ที่ได้</div>
         <div class="seg fmt" role="radiogroup" aria-label="รูปแบบไฟล์ที่ได้">
-          <button id="fmtDocx" role="radio"><span data-icon="word" data-size="15"></span>Word (.docx)</button>
-          <button id="fmtPdf" role="radio"><span data-icon="pdf" data-size="15"></span>PDF (.pdf)</button>
+          <button id="fmtDocx" role="radio" title="ไฟล์ Word (.docx) อย่างเดียว"><span data-icon="word" data-size="15"></span>Word</button>
+          <button id="fmtPdf" role="radio" title="ไฟล์ PDF (.pdf) อย่างเดียว"><span data-icon="pdf" data-size="15"></span>PDF</button>
+          <button id="fmtBoth" role="radio" title="ได้ทั้งไฟล์ Word และ PDF">Word + PDF</button>
         </div>
         <div class="label">บันทึกไฟล์ที่</div>
         <div class="seg">
@@ -430,10 +431,8 @@ main { display: flex; flex-direction: column; gap: 20px; }
       <div class="pv-msg" id="pvMsg"></div>
     </div>
     <div class="modal-f">
-      <div class="hint" id="pvHint">ตรวจเอกสารให้เรียบร้อย แล้วเลือกบันทึกเป็น Word หรือ PDF — บันทึกได้ทันที ไม่ต้องรอแปลงซ้ำ</div>
+      <div class="hint" id="pvHint"></div>
       <button class="btn btn-outline" id="pvClose">ปิด</button>
-      <button class="btn btn-outline pv-save" id="pvWord" data-format="docx" disabled><span data-icon="word"></span>สร้างไฟล์ Word</button>
-      <button class="btn btn-soft pv-save" id="pvPdf" data-format="pdf" disabled><span data-icon="pdf"></span>สร้างไฟล์ PDF</button>
     </div>
   </div>
 </div>
@@ -617,7 +616,7 @@ function rowHtml(it) {
   const hint = it.ok ? slotDef(it.slot) : null;     // ช่องที่ไฟล์นี้ควรอยู่
   const previews = it.st === "done" ? [] : (it.outputs_preview || []).filter((p) => !p.requires || opt(p.requires));
   const preview = it.ok && previews.length
-    ? `<div class="preview" title="ชื่อไฟล์ที่จะได้">${previews.map((p) => `<span>${esc(p.name)}.${fmt()}</span>`).join("")}</div>` : "";
+    ? `<div class="preview" title="ชื่อไฟล์ที่จะได้">${previews.map((p) => `<span>${esc(p.name)}.${p.ext || (fmt() === "both" ? "docx / .pdf" : fmt())}</span>`).join("")}</div>` : "";
   const langPill = it.lang ? `<span class="lang ${esc(it.lang)}" title="${esc(it.lang_source || "")}">${esc(it.lang_label || it.lang.toUpperCase())}</span>` : "";
   let notes = "";
   if (it.st === "error") notes = `<div class="note err">${esc(it.result ? it.result.error : it.reason)}</div>`;
@@ -727,11 +726,12 @@ function renderPanel() {
   renderSettings();
 }
 
-const fmt = () => (state.settings.format === "pdf" ? "pdf" : "docx");     // รูปแบบไฟล์ที่ส่งออก
+const fmt = () => (["pdf", "both"].includes(state.settings.format) ? state.settings.format : "docx");     // รูปแบบไฟล์ที่ส่งออก
+const FMT_LABEL = { docx: "Word", pdf: "PDF", both: "Word หรือ PDF" };
 
 function renderSettings() {
   const s = state.settings;
-  for (const [id, f] of [["fmtDocx", "docx"], ["fmtPdf", "pdf"]]) {
+  for (const [id, f] of [["fmtDocx", "docx"], ["fmtPdf", "pdf"], ["fmtBoth", "both"]]) {
     $(id).classList.toggle("on", fmt() === f);
     $(id).setAttribute("aria-checked", fmt() === f);
   }
@@ -801,6 +801,7 @@ $("docChecks").addEventListener("change", (e) => {
 });
 $("fmtDocx").onclick = () => saveSettings({ format: "docx" });
 $("fmtPdf").onclick = () => saveSettings({ format: "pdf" });
+$("fmtBoth").onclick = () => saveSettings({ format: "both" });
 $("destSame").onclick = () => saveSettings({ dest: "same" });
 $("destFolder").onclick = async () => {
   try {
@@ -874,7 +875,7 @@ async function convertItems(todo, format = fmt()) {
       if (r.ok) { ok++; state.lastOutput = r.docx; } else bad++;
     }
     toast(bad ? `เสร็จ ${ok} ไฟล์ · ไม่สำเร็จ ${bad} ไฟล์` : `เสร็จเรียบร้อย ${ok} ไฟล์`, bad ? "alert" : "check");
-    $("hint").textContent = `กดปุ่ม ${format === "pdf" ? "PDF" : "Word"} ในรายการเพื่อเปิดไฟล์`;
+    $("hint").textContent = `กดปุ่ม ${FMT_LABEL[format] || "Word"} ในรายการเพื่อเปิดไฟล์`;
   } catch (e) {
     todo.forEach((x) => (x.st = "ready"));
     toast("แปลงไม่สำเร็จ: " + e.message, "alert");
@@ -888,10 +889,7 @@ async function convertItems(todo, format = fmt()) {
 $("runBtn").onclick = () => convertItems(mine().filter((x) => x.st === "ready" && active(x)));
 
 // ---------- ดูตัวอย่างเอกสาร: สร้าง PDF ชั่วคราวด้วย Word แล้วแสดงในหน้าต่างนี้ ----------
-let pvSeq = 0, pvItem = null;
-function pvSaveEnabled(on) {
-  document.querySelectorAll(".pv-save").forEach((b) => (b.disabled = !on));
-}
+let pvSeq = 0;
 function pvShow(page) {
   $("pvFrame").hidden = false;
   $("pvMsg").hidden = true;
@@ -914,11 +912,9 @@ async function openPreview(id) {
   const it = state.items.find((x) => x.id === id);
   if (!it) return;
   const seq = ++pvSeq;
-  pvItem = id;
-  pvSaveEnabled(false);
   $("pvHint").textContent = it.st === "done"
-    ? "ไฟล์นี้สร้างแล้ว — กดสร้างอีกครั้งจะได้ไฟล์ใหม่ (ไม่เขียนทับไฟล์เดิม)"
-    : "ตรวจเอกสารให้เรียบร้อย แล้วเลือกบันทึกเป็น Word หรือ PDF — บันทึกได้ทันที ไม่ต้องรอแปลงซ้ำ";
+    ? "ไฟล์นี้สร้างแล้ว — ถ้าต้องการสร้างใหม่ ปิดหน้าต่างนี้แล้วกด “ปรับเอกสาร” (เขียนทับไฟล์เดิม — ถือเป็นฉบับปรับปรุง)"
+    : "ตรวจเอกสารแล้วปิดหน้าต่างนี้ กด “ปรับเอกสาร” เพื่อบันทึก — ใช้ไฟล์ที่สร้างไว้ตอนดูตัวอย่าง ไม่ต้องรอแปลงซ้ำ";
   $("pv").hidden = false;
   $("pvSub").textContent = it.name;
   $("pvTabs").hidden = true;
@@ -935,7 +931,6 @@ async function openPreview(id) {
       `<button data-url="${esc(p.url)}">${icon(/อนุมัติ/.test(p.kind) ? "approve" : "invite", 15)}${esc(p.label || p.kind)}</button>`).join("");
     $("pvTabs").hidden = r.pages.length < 2;
     pvShow(r.pages[0]);
-    pvSaveEnabled(true);
   } catch (e) {
     if (seq === pvSeq) pvMessage(`${icon("alert", 28)}<div>สร้างตัวอย่างไม่สำเร็จ: ${esc(e.message)}</div>`, true);
   }
@@ -945,16 +940,6 @@ $("pvTabs").onclick = (e) => {
   if (b) pvShow({ url: b.dataset.url });
 };
 $("pvX").onclick = closePreview;
-document.querySelectorAll(".pv-save").forEach((b) => (b.onclick = () => {
-  const it = state.items.find((x) => x.id === pvItem);
-  if (!it) return;
-  const format = b.dataset.format;
-  closePreview();
-  saveSettings({ format });            // รูปแบบที่เลือกกลายเป็นค่าเริ่มต้นของครั้งต่อไป
-  if (it.st === "done" || it.st === "error") it.st = "ready";
-  const comps = mine().filter((x) => companion(x) && x.st === "ready" && active(x));
-  convertItems([it, ...comps], format);
-}));
 $("pvClose").onclick = closePreview;
 $("pv").onclick = (e) => { if (e.target === $("pv")) closePreview(); };
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("pv").hidden) closePreview(); });

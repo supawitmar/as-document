@@ -75,7 +75,7 @@ Write-Host "2) ไลบรารี Python (pymupdf, pillow)"
 if ($SkipPip) {
     Warn "ข้าม (SkipPip)"
 } else {
-    & $py -m pip install --user --upgrade --disable-pip-version-check -q -r (Join-Path $App "requirements.txt")
+    & $py -m pip install --user --upgrade --disable-pip-version-check --no-warn-script-location -q -r (Join-Path $App "requirements.txt")
     & $py -c "import pymupdf, PIL" 2>$null
     if ($LASTEXITCODE -eq 0) { Ok "ติดตั้งแล้ว (ตรวจแล้วว่าใช้ได้)" }
     else {

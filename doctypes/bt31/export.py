@@ -288,6 +288,8 @@ def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, info
         notes = normalize(L, courses, inform_supervisor)
         if getattr(L, "word_saved", False):
             notes.insert(0, WORD_SAVED_NOTE)
+            if "fixletters_docx" in str(f):          # แปลงมาจาก .docx (wordfile.as_export)
+                notes[0] = "อ่านจากไฟล์ Export ที่บันทึกเป็น .docx — จัดรูปแบบให้ตามมาตรฐาน โปรดตรวจในตัวอย่างก่อนใช้"
         if attachment:
             use_attachment(L)
         if clean(re.sub(r"^(?:เรียน|Dear)", "", L.header.get("to", ""))) in ("", "-"):
