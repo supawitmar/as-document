@@ -203,8 +203,9 @@ def main(argv=None) -> int:
         return 0
     if args.tree:
         dest = Path(args.dest) if args.dest else BASE
-        v = read_version(dest / VERSION_FILE.name)
-        r = {**apply_tree(Path(args.tree), dest), "build": v["build"], "version": v["version"]}
+        r = apply_tree(Path(args.tree), dest)
+        v = read_version(dest / VERSION_FILE.name)          # อ่านหลังติดตั้ง = รุ่นใหม่
+        r.update(build=v["build"], version=v["version"])
     else:
         r = apply(Path(args.zip) if args.zip else None)
     print(f"version {r['version']} (build {r['build']}): อัปเดต {len(r['changed'])} ไฟล์, "
