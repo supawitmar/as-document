@@ -3,13 +3,15 @@
 ปล่อยรุ่นใหม่ (version 1.x) ให้เครื่องอื่นอัปเดต — รันบนเครื่องพัฒนา (repository git) เมื่องานพร้อมแล้ว
 
     python tools/release.py "หัวข้อของรุ่น" -i "รายละเอียดข้อ 1" -i "รายละเอียดข้อ 2" ...
-                            [--version 1.2] [--no-push] [--allow-names]
+                            [--fix] [--version 1.2] [--no-push] [--allow-names]
     python tools/release.py --package-only        # สร้างโฟลเดอร์อัปเดตของรุ่นปัจจุบันใหม่ (ไม่เพิ่มเวอร์ชัน)
 
 ขั้นตอน:
     1. ตรวจ: คอมไพล์ .py ทุกไฟล์, โหลดประเภทเอกสารครบไม่มี error, ไม่มีไฟล์เฉพาะเครื่อง/ไฟล์ตัวอย่างใน git,
        ไม่มีชื่อบุคคลที่ดูเป็นชื่อจริงในโค้ด (repository เป็น Public) — ถ้าเป็นชื่อสมมติจริง ใช้ --allow-names
-    2. เพิ่มเวอร์ชันใน version.json (1.0 → 1.1 …, build +1) พร้อมหัวข้อและรายละเอียด
+    2. เพิ่มเวอร์ชันใน version.json (build +1) พร้อมหัวข้อและรายละเอียด
+           เพิ่ม/ปรับฟังก์ชัน   1.2 → 1.3      (ค่าเริ่มต้น; 1.2.1 → 1.3)
+           แก้เล็กน้อย --fix    1.2 → 1.2.1    (1.2.1 → 1.2.2) เช่น แก้ข้อความ ป้าย คำผิด
        (เครื่องผู้ใช้เห็นข้อความนี้บนแถบ "มีอัปเดตใหม่" และในไฟล์รายละเอียดของแพ็กเกจ)
     3. git commit + push ขึ้น GitHub (main) — เครื่องที่เปิดโปรแกรมครั้งถัดไปจะเห็นแถบอัปเดต
     4. สร้างโฟลเดอร์ dist/อัปเดต version 1.x/ (+ ไฟล์ .zip ของโฟลเดอร์นี้ ไว้ส่งทาง LINE/อีเมล):
@@ -88,11 +90,16 @@ def thai_date(iso: str) -> str:
     return f"{d.day} {TH_MONTHS[d.month - 1]} {d.year + 543}"
 
 
-def next_version(v: dict) -> str:
+def next_version(v: dict, fix: bool = False) -> str:
+    """รุ่นถัดไป: เพิ่มฟังก์ชัน 1.2 / 1.2.1 → 1.3 — แก้เล็กน้อย (fix) 1.2 → 1.2.1, 1.2.1 → 1.2.2"""
     from core.update import version_label
     cur = version_label(int(v.get("build", 0)), v.get("version", ""))
-    m = re.fullmatch(r"(\d+)\.(\d+)", cur)
-    return f"{m[1]}.{int(m[2]) + 1}" if m else "1.0"
+    m = re.fullmatch(r"(\d+)\.(\d+)(?:\.(\d+))?", cur)
+    if not m:
+        return "1.0"
+    if fix:
+        return f"{m[1]}.{m[2]}.{int(m[3] or 0) + 1}"
+    return f"{m[1]}.{int(m[2]) + 1}"
 
 
 def release_notes(v: dict) -> str:
@@ -155,7 +162,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="ปล่อยรุ่นใหม่ (version 1.x) ให้เครื่องอื่นอัปเดต")
     ap.add_argument("message", nargs="?", help="หัวข้อของรุ่นที่ผู้ใช้เครื่องอื่นจะเห็น เช่น 'เพิ่มประเภทเอกสาร บฑ.xx'")
     ap.add_argument("-i", "--item", action="append", default=[], help="รายละเอียดที่แก้ไข (ใส่ได้หลายครั้ง)")
-    ap.add_argument("--version", help="เลขเวอร์ชันของรุ่นนี้ (ค่าเริ่มต้น: เพิ่มเลขหลังจุด เช่น 1.1 → 1.2)")
+    ap.add_argument("--fix", action="store_true", help="แก้เล็กน้อย (ข้อความ ป้าย คำผิด): เพิ่มเลขย่อย เช่น 1.2 → 1.2.1")
+    ap.add_argument("--version", help="เลขเวอร์ชันของรุ่นนี้ (ค่าเริ่มต้น: เพิ่มเลขหลังจุด เช่น 1.2 → 1.3, หรือ 1.2.1 ถ้าใส่ --fix)")
     ap.add_argument("--no-push", action="store_true", help="commit อย่างเดียว ยังไม่ push")
     ap.add_argument("--allow-names", action="store_true", help="ยืนยันว่าชื่อบุคคลที่พบเป็นชื่อสมมติ/ชื่อที่ต้องเผยแพร่")
     ap.add_argument("--package-only", action="store_true", help="สร้างโฟลเดอร์อัปเดตของรุ่นปัจจุบันใหม่ (ไม่เพิ่มเวอร์ชัน/ไม่ commit)")
@@ -180,7 +188,7 @@ def main(argv=None) -> int:
 
     v = json.loads(VERSION_FILE.read_text(encoding="utf-8")) if VERSION_FILE.exists() else {"build": 0, "changes": []}
     build = int(v.get("build", 0)) + 1
-    version = args.version or next_version(v)
+    version = args.version or next_version(v, args.fix)
     today = dt.date.today().isoformat()
     change = {"build": build, "version": version, "date": today, "text": args.message, "items": args.item}
     v = {"version": version, "build": build, "date": today, "changes": [change] + v.get("changes", [])[:49]}

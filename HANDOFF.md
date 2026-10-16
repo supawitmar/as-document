@@ -196,7 +196,7 @@ python bt31.py "<บฑ31>.pdf" --approve --pdf [--show] [--en "program=..." --e
 python app.py [--serve] [ไฟล์...]
 python tools/learn.py inspect <ตัวอย่าง.docx|.pdf>
 python tools/learn.py compare <ผลลัพธ์.pdf> <ตัวอย่าง.docx|.pdf> [-o DIR]
-python tools/release.py "หัวข้อ" -i "รายละเอียด" ... [--version 1.x] [--no-push] [--allow-names]   # ปล่อยรุ่นใหม่
+python tools/release.py "หัวข้อ" -i "รายละเอียด" ... [--fix] [--version 1.x] [--no-push] [--allow-names]   # ปล่อยรุ่นใหม่
 python tools/release.py --package-only                            # สร้างโฟลเดอร์ "อัปเดต version 1.x" ของรุ่นปัจจุบันใหม่
 python -m core.update [--check] [--zip ไฟล์.zip]                  # อัปเดตจากบรรทัดคำสั่ง (เครื่องผู้ใช้)
 ```
@@ -205,6 +205,8 @@ python -m core.update [--check] [--zip ไฟล์.zip]                  # อ�
 
 ทุกครั้งที่เพิ่มประเภทเอกสารใหม่ หรือแก้รูปแบบเอกสารที่มีอยู่ ให้ปล่อยเป็นรุ่นใหม่ — เลขที่ผู้ใช้เห็นคือ `version`
 (1.0, 1.1, …) ส่วนโปรแกรมเทียบรุ่นด้วย `build` (จำนวนเต็ม +1 ทุกรุ่น) ใน `version.json`
+- **เพิ่ม/ปรับฟังก์ชัน** (ประเภทเอกสารใหม่, รูปแบบใหม่, ความสามารถใหม่) → เลขหลังจุด: 1.2 → **1.3** (ค่าเริ่มต้น; 1.2.1 → 1.3)
+- **แก้เล็กน้อย** (ข้อความ ป้าย คำผิด) → เลขย่อย ใส่ `--fix`: 1.2 → **1.2.1** → 1.2.2
 
 1. บนเครื่องพัฒนา (repository git) เมื่องานพร้อม:
    `python tools/release.py "หัวข้อของรุ่น" -i "รายละเอียดข้อ 1" -i "รายละเอียดข้อ 2"`
