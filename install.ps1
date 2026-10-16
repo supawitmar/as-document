@@ -76,9 +76,11 @@ if ($SkipPip) {
     Warn "ข้าม (SkipPip)"
 } else {
     & $py -m pip install --user --upgrade --disable-pip-version-check -q -r (Join-Path $App "requirements.txt")
-    if ($LASTEXITCODE -eq 0) { Ok "ติดตั้งแล้ว" }
+    & $py -c "import pymupdf, PIL" 2>$null
+    if ($LASTEXITCODE -eq 0) { Ok "ติดตั้งแล้ว (ตรวจแล้วว่าใช้ได้)" }
     else {
         Bad "ติดตั้งไลบรารีไม่สำเร็จ — ตรวจว่าต่ออินเทอร์เน็ตได้ แล้วรัน ติดตั้ง.bat ใหม่"
+        Info "หรือติดตั้งเองด้วยคำสั่ง: `"$py`" -m pip install --user pymupdf pillow"
         Info "เครือข่ายองค์กรที่ต้องใช้ proxy: ดู INSTALL.md หัวข้อแก้ปัญหา"
     }
 }
@@ -158,7 +160,7 @@ try {
 # 7) ทดสอบว่าโปรแกรมโหลดได้
 Write-Host "7) ทดสอบโปรแกรม"
 Push-Location $App
-& $py -c "import app; from core import registry; d = registry.discover(); assert d and not registry.errors, registry.errors; print('ok')" 2>$null | Out-Null
+& $py -c "import pymupdf, PIL, app; from core import registry; d = registry.discover(); assert d and not registry.errors, registry.errors; print('ok')" 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) { Ok "โหลดโปรแกรมและประเภทเอกสารได้" } else { Bad "โหลดโปรแกรมไม่ได้ — ลอง: $py -c `"import app; from core import registry; registry.discover(); print(registry.errors)`" เพื่อดูข้อผิดพลาด" }
 Pop-Location
 

@@ -6,7 +6,6 @@
 hub ไม่มีกฎของเอกสารใดเลย: รายชื่อประเภทเอกสารมาจาก doctypes/ (core.registry) หน้าจอสร้างจาก manifest
 ของแต่ละประเภท และการอ่าน/แปลงไฟล์ส่งต่อให้ประเภทนั้น (core.doctype.DocType)
 """
-import base64
 import ctypes
 import json
 import os
@@ -119,6 +118,10 @@ def describe(iid: str) -> dict:
             info = {"ok": False, "reason": f"ไฟล์ขนาด {size_mb:.1f} MB เกินกำหนด (ไม่เกิน {dt.max_mb} MB)"}
         else:
             info = dt.inspect(it["path"])
+            # ช่องที่กำหนดขนาดเองได้ (เช่น ตารางสอน) — ตรวจหลังรู้ว่าไฟล์นี้เป็นของช่องไหน
+            slot_max = next((s.get("max_mb") for s in dt.ui.get("slots", []) if s.get("id") == info.get("slot")), None)
+            if slot_max and size_mb > slot_max:
+                info = {**info, "ok": False, "reason": f"ไฟล์ขนาด {size_mb:.1f} MB เกินกำหนด (ไม่เกิน {slot_max} MB)"}
     except Exception as e:      # ประเภทเอกสารอ่านไฟล์ไม่ได้ — แสดงเป็นแถวที่ใช้ไม่ได้ แทนที่จะล้มทั้งหน้า
         info = {"ok": False, "reason": f"อ่านไฟล์ไม่ได้: {e}"}
     folder = str(it["path"].parent) if it["origin"] == "path" else ""
@@ -281,6 +284,14 @@ def is_allowed(p: Path) -> bool:
     return p in allowed or p.parent in allowed and p.suffix.lower() in (".docx", ".pdf", ".doc")
 
 
+REQUIRED_LIBS = {"pymupdf": "pymupdf", "PIL": "pillow"}     # ชื่อที่ import -> ชื่อที่ pip
+
+
+def missing_libs() -> list:
+    import importlib.util
+    return [pip for mod, pip in REQUIRED_LIBS.items() if importlib.util.find_spec(mod) is None]
+
+
 def init_payload() -> dict:
     s = load_settings()
     initial = [register(p, "path", d) for p, d in collect(FILES, s["doctype"])]
@@ -288,6 +299,7 @@ def init_payload() -> dict:
         s = update_settings({"doctype": initial[0]["doctype"]})
     return {"settings": s, "doctypes": [d.manifest() for d in registry.all_doctypes()],
             "load_errors": {k: v.strip().splitlines()[-1] for k, v in registry.errors.items()},
+            "missing_libs": missing_libs(), "version": update.read_version()["version"], "python": sys.executable.replace("pythonw.exe", "python.exe"),
             "items": initial, "downloads": str(DOWNLOADS),
             "downloads_new": {d.id: len(new_in_downloads(d.id)) for d in registry.all_doctypes() if d.downloads}}
 
@@ -393,13 +405,6 @@ class Handler(BaseHTTPRequestHandler):
             return {"path": ask("folder", s.get("outdir") or str(DOWNLOADS)) or ""}
         if path == "/api/downloads":
             return {"items": [register(p, "path", doctype) for p in new_in_downloads(doctype)]}
-        if path == "/api/upload":
-            registry.get(doctype)
-            name = Path(data.get("name") or "file").name
-            d = UPLOADS / uuid.uuid4().hex[:8]
-            d.mkdir(parents=True, exist_ok=True)
-            (d / name).write_bytes(base64.b64decode(data.get("data") or ""))
-            return {"item": register(d / name, "upload", doctype)}
         if path == "/api/remove":
             for i in data.get("ids", []):
                 items.pop(i, None)

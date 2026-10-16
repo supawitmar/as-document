@@ -2,10 +2,13 @@
 """
 อัปเดต (patch) จาก GitHub — เครื่องที่ติดตั้งแล้วได้ประเภทเอกสารใหม่/แก้รูปแบบ โดยไม่ต้องติดตั้งใหม่
 
-ผู้พัฒนา: ปล่อย patch ด้วย `python tools/release.py "ข้อความ"` (เพิ่ม build ใน version.json แล้ว push)
-เครื่องผู้ใช้: หน้าโปรแกรมเช็ก version.json บน GitHub ตอนเปิด ถ้า build ใหม่กว่า แสดงปุ่ม "อัปเดต"
-           → apply(): ดาวน์โหลด ZIP ของ branch main → คัดลอกทับ แล้วเปิดโปรแกรมใหม่
-           (หรือบรรทัดคำสั่ง: python -m core.update [--zip ไฟล์.zip])
+ผู้พัฒนา: ปล่อยรุ่นใหม่ด้วย `python tools/release.py "หัวข้อ" -i "รายละเอียด" ...`
+           (เพิ่ม version 1.x + build ใน version.json, commit, push และสร้างโฟลเดอร์ "อัปเดต version 1.x")
+เครื่องผู้ใช้อัปเดตได้ 2 ทาง (ใช้ apply_tree ตัวเดียวกัน):
+    1. ในโปรแกรม: เช็ก version.json บน GitHub ตอนเปิด ถ้า build ใหม่กว่า แสดงแถบ "มีอัปเดตใหม่" → อัปเดตเลย
+    2. โฟลเดอร์ "อัปเดต version 1.x" (ไม่ต้องใช้อินเทอร์เน็ต): ดับเบิลคลิกไฟล์ "คลิกเพื่ออัปเดต…" (tools/package/update.ps1)
+    (หรือบรรทัดคำสั่ง: python -m core.update [--zip ไฟล์.zip])
+เลขเวอร์ชันที่ผู้ใช้เห็นคือ "version" (1.0, 1.1, …) — โปรแกรมเทียบรุ่นด้วย "build" (เลขจำนวนเต็ม เพิ่มทีละ 1)
 
 สิ่งที่ไม่ถูกเขียนทับ:
     - ไฟล์เฉพาะเครื่อง (LOCAL_ONLY): settings.json, converted.json, translations.json, samples/, ไอคอน .lnk
@@ -41,12 +44,19 @@ def raw_url(path: str) -> str:
     return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{path}"
 
 
+def version_label(build: int, version: str = "") -> str:
+    """เลขเวอร์ชันที่แสดง: ใช้ "version" ใน version.json ถ้ามี — รุ่นก่อนมีเลขเวอร์ชันนับ build 1 = 1.0"""
+    return version or (f"1.{build - 1}" if build >= 1 else "ก่อน 1.0")
+
+
 def read_version(path: Path = VERSION_FILE) -> dict:
     try:
         v = json.loads(Path(path).read_text(encoding="utf-8"))
-        return {"build": int(v.get("build", 0)), "date": v.get("date", ""), "changes": v.get("changes", [])}
+        build = int(v.get("build", 0))
+        return {"build": build, "version": version_label(build, v.get("version", "")), "date": v.get("date", ""),
+                "changes": v.get("changes", [])}
     except (OSError, ValueError, TypeError):
-        return {"build": 0, "date": "", "changes": []}
+        return {"build": 0, "version": version_label(0), "date": "", "changes": []}
 
 
 def is_dev_checkout() -> bool:
@@ -54,10 +64,10 @@ def is_dev_checkout() -> bool:
 
 
 def check(timeout: float = 6) -> dict:
-    """{'available', 'current', 'latest', 'changes': [ข้อความของ build ที่ใหม่กว่า], 'dev', 'error'}"""
+    """{'available', 'current', 'latest', 'version', 'latest_version', 'changes': [รุ่นที่ใหม่กว่า], 'dev', 'error'}"""
     cur = read_version()
-    out = {"available": False, "current": cur["build"], "latest": cur["build"], "changes": [],
-           "dev": is_dev_checkout(), "error": ""}
+    out = {"available": False, "current": cur["build"], "latest": cur["build"], "version": cur["version"],
+           "latest_version": cur["version"], "changes": [], "dev": is_dev_checkout(), "error": ""}
     try:
         with urllib.request.urlopen(raw_url("version.json") + f"?t={cur['build']}", timeout=timeout) as r:
             latest = json.loads(r.read().decode("utf-8"))
@@ -65,6 +75,7 @@ def check(timeout: float = 6) -> dict:
         out["error"] = str(e)
         return out
     out["latest"] = int(latest.get("build", 0))
+    out["latest_version"] = version_label(out["latest"], latest.get("version", ""))
     out["changes"] = [c for c in latest.get("changes", []) if int(c.get("build", 0)) > cur["build"]]
     out["available"] = out["latest"] > cur["build"] and not out["dev"]
     return out
@@ -169,7 +180,8 @@ def apply(zip_path: Path = None, log=print) -> dict:
         if len(roots) != 1 or not (roots[0] / "app.py").exists() or not (roots[0] / "version.json").exists():
             raise RuntimeError("ไฟล์อัปเดตไม่ถูกต้อง (ไม่พบ app.py / version.json)")
         res = apply_tree(roots[0], log=log)
-    res["build"] = read_version()["build"]
+    v = read_version()
+    res["build"], res["version"] = v["build"], v["version"]
     return res
 
 
@@ -191,10 +203,12 @@ def main(argv=None) -> int:
         return 0
     if args.tree:
         dest = Path(args.dest) if args.dest else BASE
-        r = {**apply_tree(Path(args.tree), dest), "build": read_version(dest / VERSION_FILE.name)["build"]}
+        v = read_version(dest / VERSION_FILE.name)
+        r = {**apply_tree(Path(args.tree), dest), "build": v["build"], "version": v["version"]}
     else:
         r = apply(Path(args.zip) if args.zip else None)
-    print(f"build {r['build']}: อัปเดต {len(r['changed'])} ไฟล์, รวมข้อมูล {len(r['merged'])}, ลบ {len(r['removed'])}")
+    print(f"version {r['version']} (build {r['build']}): อัปเดต {len(r['changed'])} ไฟล์, "
+          f"รวมข้อมูล {len(r['merged'])}, ลบ {len(r['removed'])}")
     if r["pip_error"]:
         print("!! ติดตั้งไลบรารีไม่สำเร็จ:", r["pip_error"])
     return 0

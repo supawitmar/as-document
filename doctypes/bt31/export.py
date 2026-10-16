@@ -33,10 +33,30 @@ def detect_lang(text: str) -> str:
     return max(score, key=score.get)
 
 
+WORD_SAVED_NOTE = "อ่านจากไฟล์ที่เปิดแก้ไขใน Word แล้ว — โปรดตรวจความถูกต้องในตัวอย่างก่อนใช้"
+
+
+def from_word_html(src: str) -> str:
+    """ไฟล์ Export ที่เปิดแก้ไขใน Word แล้วบันทึก -> โครง HTML แบบไฟล์ดิบจากระบบ เพื่อใช้ตัวอ่านเดิม
+    Word เปลี่ยน <div>/<br> ของระบบเป็น <p class=MsoNormal> (ชิดขวา = align=right) และแตกข้อความเป็น <span> ย่อย ๆ"""
+    s = re.sub(r"(?is)<!\[if !supportLineBreakNewLine\]>.*?<!\[endif\]>", "", src)   # <br> ที่ Word เติมท้ายย่อหน้า
+    s = re.sub(r"(?is)<!\[(?:if|endif)[^\]]*\]>", "", s)
+    s = re.sub(r"(?is)<o:p>.*?</o:p>", "", s)
+    s = re.sub(r"(?is)</?(?:span|b|i|u|font|a)\b[^>]*>", "", s)
+
+    def block(m):
+        right = re.search(r"align=\"?right|text-align:\s*right", m.group(1), re.I)
+        return f'<div align="right">{m.group(2)}</div>' if right else f"<div>{m.group(2)}</div>"
+    return re.sub(r"(?is)<p\b([^>]*)>(.*?)</p>", block, s)
+
+
 def parse(src: str) -> Letter:
+    if is_word_saved(src):
+        src = from_word_html(src)
     src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
     src = re.sub(r"(?is)<style.*?</style>|<link[^>]*>|<img[^>]*>", "", src)
-    src = re.sub(r"\s*[\r\n]+\s*", " ", src)
+    # ขึ้นบรรทัดใหม่ในซอร์ส = ช่องว่าง (เขียนแบบไม่ย้อนรอย: ช่องว่างยาวมากไม่ทำให้ช้า)
+    src = re.sub(r"\s+", lambda m: " " if "\n" in m.group() or "\r" in m.group() else m.group(), src)
     i = src.lower().find("<body")
     body = src[i:] if i >= 0 else src
 
@@ -108,9 +128,15 @@ def parse_header_en(L: Letter, lines: list):
         date = [c for c in cl[ref + 1:dear] if c and not c.startswith("Subject")]
         if date:
             L.header["date"] = " ".join(date)
+    start = dear + 1
     if dear < len(cl):
-        L.header["to"] = cl[dear]
-    L.body = paragraphs(lines[dear + 1:], en=True)
+        # ผู้รับยาวที่ถูกตัดบรรทัดเอง (แก้ใน Word) — บรรทัดต่อเนื่องก่อนบรรทัดว่างเป็นส่วนของ "Dear ..."
+        to = [cl[dear]]
+        while start < len(cl) and cl[start] and len(cl[start]) < 100 and not cl[start].endswith("."):
+            to.append(cl[start])
+            start += 1
+        L.header["to"] = " ".join(to)
+    L.body = paragraphs(lines[start:], en=True)
 
 
 # ---------- ปรับเนื้อหา ----------
@@ -213,9 +239,6 @@ def inspect(path: Path) -> dict:
         src = read_source(path)
     except OSError as e:
         return {"ok": False, "kind": "", "kind_code": "", "lang": "", "to": "", "reason": str(e)}
-    if is_word_saved(src):
-        return {"ok": False, "kind": "", "kind_code": "", "lang": "", "to": "",
-                "reason": "ไม่ใช่ไฟล์ export (เป็นไฟล์ Word แล้ว)"}
     L = parse(src)
     if not L.header:
         return {"ok": False, "kind": "", "kind_code": "", "lang": "", "to": "",
@@ -245,12 +268,8 @@ def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, info
         except OSError as e:
             results.append(dict(src=f, kind="", docx=None, pdf=None, doc=None, notes=[], error=str(e)))
             continue
-        if is_word_saved(src):
-            msg = "ข้าม: เป็นไฟล์ที่บันทึกจาก Word แล้ว (ไม่ใช่ไฟล์ export จากระบบ)"
-            log(f"-- {f.name}: {msg}")
-            results.append(dict(src=f, kind="", docx=None, pdf=None, doc=None, notes=[], error=msg))
-            continue
         L = parse(src)
+        L.word_saved = is_word_saved(src)
         if not L.lang:
             msg = "ระบุไม่ได้ว่าเป็นหนังสือภาษาไทยหรือภาษาอังกฤษ"
             log(f"!! {f.name}: {msg}")
@@ -267,6 +286,8 @@ def convert(files: list, outdir=None, pdf=False, keep_doc=False, log=print, info
     entries = []
     for f, L in letters:
         notes = normalize(L, courses, inform_supervisor)
+        if getattr(L, "word_saved", False):
+            notes.insert(0, WORD_SAVED_NOTE)
         if attachment:
             use_attachment(L)
         if clean(re.sub(r"^(?:เรียน|Dear)", "", L.header.get("to", ""))) in ("", "-"):

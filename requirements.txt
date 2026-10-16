@@ -1,3 +1,4 @@
-# ไลบรารี Python ที่ระบบปรับเอกสาร บฑ.31 ใช้ (ติดตั้งด้วย ติดตั้ง.bat หรือ pip install -r requirements.txt)
-pymupdf>=1.24      # อ่าน PDF หน้า บฑ.31 (bt31.py)
-pillow>=10.0       # วัดความกว้างข้อความเพื่อจัดบล็อกลายมือชื่อ / สร้างไอคอน
+# Python libraries used by the document formatter.
+# Keep this file ASCII only: pip on Thai Windows reads it as cp874 and fails on Thai text.
+pymupdf>=1.24    # read PDF forms (BT.31 e-Form), attach PDF schedules
+pillow>=10.0     # measure text width for the signature block, build the icon

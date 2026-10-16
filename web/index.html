@@ -89,6 +89,8 @@ header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .app-icon { width: 46px; height: 46px; border-radius: 14px; box-shadow: 0 8px 20px -8px rgba(67, 56, 202, .6); }
 .title h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
 .title p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.title .ver { margin-left: 8px; padding: 2px 8px; border-radius: 99px; background: var(--primary-soft); color: var(--primary);
+  font-size: 12px; font-weight: 600; vertical-align: middle; }
 .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .icon-btn {
   width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
@@ -360,8 +362,8 @@ main { display: flex; flex-direction: column; gap: 20px; }
   <header>
     <img class="app-icon" src="/icon.png" alt="">
     <div class="title">
-      <h1>ระบบปรับเอกสาร</h1>
-      <p id="subtitle">บัณฑิตวิทยาลัย มหาวิทยาลัยมหิดล — เลือกประเภทเอกสาร แล้ววางไฟล์ → ไฟล์ Word รูปแบบมาตรฐาน</p>
+      <h1>ระบบปรับเอกสาร<span class="ver" id="appVer" hidden></span></h1>
+      <p id="subtitle">บัณฑิตวิทยาลัย มหาวิทยาลัยมหิดล — เลือกประเภทเอกสาร แล้ววางไฟล์ → ไฟล์ Word หรือ PDF รูปแบบมาตรฐาน</p>
     </div>
     <div class="header-right">
       <button class="btn btn-soft" id="dlBtn" hidden>
@@ -565,7 +567,7 @@ function renderWorkspace() {
       ${s.steps ? `<div class="steps">${s.steps.map((t, i) => `<span><b>${i + 1}</b>${esc(t)}</span>`).join("")}</div>` : ""}
       <div class="zone" data-zone="${esc(s.id)}">
         <span class="zi">${icon("upload", 26)}</span>
-        <div class="zt"><b>${esc(s.zone_title || "ลากไฟล์มาวางที่นี่")}</b><span>${esc(s.zone_desc || (s.accept || []).join(" "))}${d.max_mb ? ` · ขนาดไม่เกิน ${d.max_mb} MB` : ""}</span></div>
+        <div class="zt"><b>${esc(s.zone_title || "ลากไฟล์มาวางที่นี่")}</b><span>${esc(s.zone_desc || (s.accept || []).join(" "))}${s.max_mb || d.max_mb ? ` · ขนาดไม่เกิน ${s.max_mb || d.max_mb} MB` : ""}</span></div>
         ${s.pick ? `<button class="btn btn-outline" data-pick="${esc(s.id)}">${icon("plus", 17)}${esc(s.pick_label || "เลือกไฟล์")}</button>` : ""}
       </div>
       <div class="files" data-files="${esc(s.id)}" hidden></div>
@@ -990,7 +992,9 @@ window.addEventListener("drop", async (e) => {
   }
   let files = [...e.dataTransfer.files].filter((f) => dt().accept.includes(ext(f.name)));
   if (!files.length) return toast(dt().drop_hint || "รองรับไฟล์ " + dt().accept.join(" "), "alert");
-  const max = dt().max_mb, big = max ? files.filter((f) => f.size > max * 1048576) : [];
+  // วางในช่อง: ใช้ขนาดสูงสุดของช่องนั้น (ถ้ากำหนด) / วางนอกช่อง: ใช้ของประเภทเอกสาร แล้วโปรแกรมตรวจช่องให้อีกครั้ง
+  const max = (zone && (slotDef(zone.dataset.zone) || {}).max_mb) || dt().max_mb;
+  const big = max ? files.filter((f) => f.size > max * 1048576) : [];
   if (big.length) {      // ไม่ต้องอัปโหลดไฟล์ที่ใหญ่เกินกำหนด
     toast(`${big[0].name} ขนาด ${(big[0].size / 1048576).toFixed(1)} MB เกินกำหนด (ไม่เกิน ${max} MB)`, "alert");
     files = files.filter((f) => !big.includes(f));
@@ -1018,8 +1022,9 @@ async function checkUpdate() {
   try {
     const u = await api("/api/update/check", {});
     if (!u.available) return;
-    $("updateTitle").textContent = `มีอัปเดตใหม่ (build ${u.latest}) — กดอัปเดตแล้วโปรแกรมจะเปิดใหม่เอง`;
-    $("updateNotes").innerHTML = u.changes.slice(0, 5).map((c) => `<li>${esc(c.text)}</li>`).join("");
+    $("updateTitle").textContent = `มีอัปเดตใหม่: version ${u.latest_version} (ตอนนี้ใช้ ${u.version}) — กดอัปเดตแล้วโปรแกรมจะเปิดใหม่เอง`;
+    $("updateNotes").innerHTML = u.changes.slice(0, 3).flatMap((c) => (c.items && c.items.length ? c.items : [c.text]))
+      .slice(0, 8).map((t) => `<li>${esc(t)}</li>`).join("");
     $("updateBar").hidden = false;
   } catch (_) {}
 }
@@ -1031,8 +1036,8 @@ $("updateBtn").onclick = async () => {
   try {
     const r = await api("/api/update/apply", {});
     $("updateTitle").textContent = r.relaunch
-      ? `อัปเดตเป็น build ${r.build} แล้ว — กำลังเปิดโปรแกรมใหม่ ปิดหน้าต่างนี้ได้เลย`
-      : `อัปเดตเป็น build ${r.build} แล้ว — เปิดโปรแกรมใหม่เพื่อใช้รุ่นล่าสุด`;
+      ? `อัปเดตเป็น version ${r.version} แล้ว — กำลังเปิดโปรแกรมใหม่ ปิดหน้าต่างนี้ได้เลย`
+      : `อัปเดตเป็น version ${r.version} แล้ว — เปิดโปรแกรมใหม่เพื่อใช้รุ่นล่าสุด`;
     $("updateNotes").innerHTML = r.pip_error ? `<li>ติดตั้งไลบรารีไม่สำเร็จ: ${esc(r.pip_error)} — รัน ติดตั้ง.bat</li>` : "";
     b.hidden = true;
     if (r.relaunch) setTimeout(() => window.close(), 4000);
@@ -1050,9 +1055,15 @@ $("updateBtn").onclick = async () => {
     state.settings = init.settings;
     state.doctypes = init.doctypes;
     state.downloadsNew = init.downloads_new || {};
+    if (init.version) { $("appVer").textContent = "v" + init.version; $("appVer").hidden = false; }
     const errs = Object.entries(init.load_errors || {});
-    $("loadErr").hidden = !errs.length;
-    $("loadErr").innerHTML = errs.map(([k, v]) => `${icon("alert", 14)}โหลดประเภทเอกสาร “${esc(k)}” ไม่ได้: ${esc(v)}`).join("<br>");
+    const libs = init.missing_libs || [];
+    $("loadErr").hidden = !errs.length && !libs.length;
+    $("loadErr").innerHTML = [
+      ...(libs.length ? [`${icon("alert", 14)}เครื่องนี้ยังไม่ได้ติดตั้งไลบรารี ${esc(libs.join(", "))} — อ่าน PDF และแนบตารางสอนไม่ได้ `
+        + `· แก้: เปิด “ติดตั้ง.bat” อีกครั้ง หรือรันคำสั่ง <code>"${esc(init.python)}" -m pip install --user ${esc(libs.join(" "))}</code> แล้วเปิดโปรแกรมใหม่`] : []),
+      ...errs.map(([k, v]) => `${icon("alert", 14)}โหลดประเภทเอกสาร “${esc(k)}” ไม่ได้: ${esc(v)}`),
+    ].join("<br>");
     renderHub();
     renderWorkspace();
     render();
