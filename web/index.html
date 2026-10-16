@@ -1040,7 +1040,7 @@ $("updateBtn").onclick = async () => {
     state.settings = init.settings;
     state.doctypes = init.doctypes;
     state.downloadsNew = init.downloads_new || {};
-    if (init.version) { $("appVer").textContent = "v" + init.version; $("appVer").hidden = false; }
+    if (init.version) { $("appVer").textContent = "v. " + init.version; $("appVer").hidden = false; }
     const errs = Object.entries(init.load_errors || {});
     const libs = init.missing_libs || [];
     $("loadErr").hidden = !errs.length && !libs.length;
