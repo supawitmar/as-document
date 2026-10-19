@@ -229,6 +229,12 @@ def main(argv=None) -> int:
 
     if git("rev-parse", "--abbrev-ref", "HEAD").strip() != "main":
         raise SystemExit("ต้องอยู่ที่ branch main")
+    # ไม่มีไฟล์ค้าง (แบบระบบตรวจเล่ม): รุ่นต้องเป็นงานที่ commit แล้วเท่านั้น — กันงานครึ่งทางของ chat อื่นติดไปกับรุ่น
+    dirty = [ln[3:] for ln in git("status", "--porcelain").splitlines() if ln.strip()]
+    if dirty:
+        print("ยังออกรุ่นไม่ได้ — มีไฟล์ที่ยังไม่ได้ commit (commit งานที่จะออก หรือเก็บงานที่ยังไม่เสร็จก่อน):\n  - "
+              + "\n  - ".join(dirty))
+        return 1
     problems = checks(args.allow_names)
     if problems:
         git("reset", "-q")

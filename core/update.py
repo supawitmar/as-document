@@ -65,8 +65,17 @@ def zip_url(version: str) -> str:
     return f"https://github.com/{REPO}/archive/refs/tags/{tag_of(version)}.zip"
 
 
+# ส่งชื่อโปรแกรมไปกับทุกคำขอ (แบบเดียวกับระบบตรวจเล่ม) — proxy/firewall ขององค์กรบางแห่งบล็อกชื่อเริ่มต้น
+# "Python-urllib/3.x" ทำให้เช็กอัปเดตไม่ผ่านทั้งที่เครือข่ายเข้า GitHub ได้ (พบที่เครื่องที่ทำงาน 19 ต.ค. 2569)
+HEADERS = {"User-Agent": "as-document-updater (+https://github.com/supawitmar/as-document)"}
+
+
+def _open(url: str, timeout: float):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout)
+
+
 def _get_json(url: str, timeout: float):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    with _open(url, timeout) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
@@ -234,7 +243,7 @@ def fetch(workdir: Path, zip_path: Path = None, log=print) -> Path:
             raise RuntimeError(f"เป็นรุ่นล่าสุดที่ออกแล้ว (version {read_version()['version']})")
         expect = version_label(int(rel.get("build", 0)), rel.get("version", ""))
         log(f"กำลังดาวน์โหลด version {expect}…")
-        with urllib.request.urlopen(zip_url(expect), timeout=120) as r:
+        with _open(zip_url(expect), 120) as r:
             z.write_bytes(r.read())
     with zipfile.ZipFile(z) as zf:
         zf.extractall(workdir / "x")

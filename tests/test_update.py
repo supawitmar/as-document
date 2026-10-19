@@ -141,6 +141,25 @@ class ReleasedOnlyTests(unittest.TestCase):
         update._cache.update(at=0.0, result=None)
 
 
+class UserAgentTests(unittest.TestCase):
+    """คำขอถึง GitHub ต้องมีชื่อโปรแกรม (proxy ที่ทำงานบล็อก Python-urllib)"""
+
+    def test_requests_carry_user_agent(self):
+        seen = []
+
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"{}"
+
+        def fake(req, timeout):
+            seen.append(req.get_header("User-agent"))
+            return Resp()
+        with mock.patch.object(update.urllib.request, "urlopen", side_effect=fake):
+            update._get_json("https://example.invalid/x", 1)
+        self.assertTrue(seen and seen[0].startswith("as-document-updater"))
+
+
 class InstallWithNewUpdaterTests(unittest.TestCase):
     """ติดตั้งด้วยตัวอัปเดตของรุ่นใหม่จริง (โฟลเดอร์ที่คัดลอกจาก repo นี้)"""
 

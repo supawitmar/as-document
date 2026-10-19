@@ -1006,6 +1006,13 @@ $("themeBtn").onclick = () => {
 async function checkUpdate() {
   try {
     const u = await api("/api/update/check", {});
+    if (!u.available && u.error && !u.dev) {      // เช็กไม่ได้ — บอกให้รู้ แทนการเงียบ (เคยทำให้เครื่องที่ทำงานไม่รู้ว่ามีรุ่นใหม่)
+      $("updateTitle").textContent = "เช็กอัปเดตจาก GitHub ไม่ได้ — ถ้ามีรุ่นใหม่ ให้ใช้โฟลเดอร์ “อัปเดต version …” ที่ผู้ดูแลส่งให้";
+      $("updateNotes").innerHTML = `<li>${esc(u.error.slice(0, 160))}</li>`;
+      $("updateBtn").hidden = true;
+      $("updateBar").hidden = false;
+      return;
+    }
     if (!u.available) return;
     $("updateTitle").textContent = `มีอัปเดตใหม่: version ${u.latest_version} (ตอนนี้ใช้ ${u.version}) — กดอัปเดตแล้วโปรแกรมจะเปิดใหม่เอง`;
     $("updateNotes").innerHTML = u.changes.slice(0, 3).flatMap((c) => (c.items && c.items.length ? c.items : [c.text]))

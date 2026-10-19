@@ -27,7 +27,8 @@ def logo_source(tmp: Path) -> str:
     """คัดลอกโลโก้ไว้ข้างไฟล์ HTML ชั่วคราว ให้ Word ฝังรูปลงเอกสารได้แม้ไม่มีอินเทอร์เน็ต"""
     if not LOGO_FILE.exists():
         try:
-            with urllib.request.urlopen(LOGO_URL, timeout=15) as r:
+            req = urllib.request.Request(LOGO_URL, headers={"User-Agent": "as-document (+https://github.com/supawitmar/as-document)"})
+            with urllib.request.urlopen(req, timeout=15) as r:
                 LOGO_FILE.write_bytes(r.read())
         except OSError:
             return LOGO_URL
@@ -116,7 +117,7 @@ def render(entries: list, pdf=False, keep_doc=False, log=print, fmt=None) -> lis
         else:
             tmp_html = tmp / f"doc{n}.htm"
             tmp_html.write_text(e["build"](logo), encoding="utf-8")
-        job = {"in": str(tmp_html)}
+        job = {"in": str(tmp_html), "tighten": bool(e.get("tighten"))}
         if fmt != "pdf":
             job["docx"] = str(tmp / f"doc{n}.docx")
         if fmt != "docx":
