@@ -164,8 +164,9 @@ def lecturer_name(L: Letter) -> str:
 
 
 def output_stem(L: Letter) -> str:
-    """หนังสือเชิญ-บฑ.31 EGIT617 ผู้ช่วยศาสตราจารย์ ดร. สมชาย ใจดี
-    หนังสือขออนุมัติ-GR.31 SCFS522 Associate Professor Dr. Somchai Jaidee"""
+    """หนังสือเชิญ บฑ.31 EGIT 617 ผู้ช่วยศาสตราจารย์ ดร. สมชาย ใจดี
+    หนังสือขออนุมัติ GR.31 SCFS 522 Associate Professor Dr. Somchai Jaidee  (รหัสวิชาเว้นวรรคระหว่างตัวอักษรกับตัวเลข)"""
     kind = {"invite": "หนังสือเชิญ", "approve": "หนังสือขออนุมัติ"}.get(L.kind, "หนังสือ")
     c = course_of(L)
-    return safe_stem(f"{kind}-{'GR.31' if L.lang == 'en' else 'บฑ.31'} {c[1] if c else ''} {lecturer_name(L)}")
+    code = re.sub(r"^([A-Za-z]+)\s*(\d)", r"\1 \2", c[1]) if c else ""
+    return safe_stem(f"{kind} {'GR.31' if L.lang == 'en' else 'บฑ.31'} {code} {lecturer_name(L)}")
