@@ -45,6 +45,9 @@ preview_files = {}  # รหัสลิงก์ -> (รหัสรายก�
 preview_cache = {}  # รหัสรายการ -> {"sig", "dir", "result"}: ผลจากปุ่มดูตัวอย่าง (มีทั้ง .docx และ .pdf) ใช้ซ้ำตอนบันทึก
 last_ping = [0.0]
 restart = threading.Event()   # อัปเดตแล้ว: เปิดโปรแกรมใหม่ แล้วปิดตัวนี้
+jobs_running = [0]            # จำนวนงานแปลง/ดูตัวอย่างที่กำลังทำ — ห้ามอัปเดตระหว่างนี้
+jobs_lock = threading.Lock()
+INSTALLS_FILE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "as-document" / "installs.json"
 FILES = [a for a in sys.argv[1:] if not a.startswith("--")]
 
 
@@ -395,7 +398,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/update/check":
             return update.check()
         if path == "/api/update/apply":
-            r = update.apply(log=lambda m: None)
+            with jobs_lock:
+                if jobs_running[0]:
+                    raise ValueError("กำลังแปลงไฟล์อยู่ — รอให้เสร็จก่อนแล้วค่อยกดอัปเดต")
+                jobs_running[0] += 1          # กันไม่ให้เริ่มแปลงไฟล์ระหว่างอัปเดต
+            try:
+                r = update.apply(log=lambda m: None)
+            finally:
+                with jobs_lock:
+                    jobs_running[0] -= 1
             relaunch = "--serve" not in sys.argv
             if relaunch:
                 threading.Timer(1.0, relaunch_app).start()
@@ -417,16 +428,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             return {"settings": update_settings(data)}
         if path == "/api/preview":
-            return preview(doctype, data.get("id") or "", data.get("options") or {}, data.get("extra") or {},
-                           data.get("companions") or [])
+            with job():
+                return preview(doctype, data.get("id") or "", data.get("options") or {}, data.get("extra") or {},
+                               data.get("companions") or [])
         if path == "/api/convert":
             s = load_settings()
             patch = data.get("settings", {})
             s.update({k: v for k, v in patch.items() if k in DEFAULT_SETTINGS and k != "options"})
             for dt_id, o in (patch.get("options") or {}).items():
                 s["options"][dt_id] = {**s["options"].get(dt_id, {}), **o}
-            return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {},
-                                       data.get("companions") or [])}
+            with job():
+                return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {},
+                                           data.get("companions") or [])}
         if path in ("/api/open", "/api/reveal"):
             p = Path(data.get("path") or "")
             if not p.exists() or not is_allowed(p):
@@ -450,6 +463,33 @@ def find_edge():
     return None
 
 
+class job:
+    """นับงานแปลง/ดูตัวอย่างที่กำลังทำ (with job(): ...) — ระหว่างอัปเดตจะไม่รับงานใหม่"""
+    def __enter__(self):
+        with jobs_lock:
+            jobs_running[0] += 1
+
+    def __exit__(self, *exc):
+        with jobs_lock:
+            jobs_running[0] -= 1
+
+
+def remember_install():
+    """จำตำแหน่งโปรแกรมนี้ (และ Python ที่ใช้) ให้ตัวอัปเดตแบบ manual หาเจอเสมอ — %LOCALAPPDATA%/as-document/installs.json"""
+    try:
+        known = json.loads(INSTALLS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        known = []
+    me = {"dir": str(BASE), "python": sys.executable.replace("pythonw.exe", "python.exe"),
+          "version": update.read_version()["version"], "seen": time.strftime("%Y-%m-%d %H:%M")}
+    known = [me] + [k for k in known if isinstance(k, dict) and k.get("dir") != me["dir"] and Path(k.get("dir", "")).exists()]
+    try:
+        INSTALLS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        INSTALLS_FILE.write_text(json.dumps(known[:10], ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def relaunch_app():
     """หลังอัปเดต: เปิดโปรแกรมรุ่นใหม่ (หน้าต่างใหม่) แล้วให้ตัวนี้ปิดเอง"""
     pyw = Path(sys.executable).with_name("pythonw.exe")
@@ -464,6 +504,7 @@ def app_window_open() -> bool:
 def main():
     shutil.rmtree(PREVIEWS, ignore_errors=True)       # ตัวอย่างที่ค้างจากครั้งก่อน
     reset_checks()
+    remember_install()
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:

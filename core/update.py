@@ -1,22 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-อัปเดต (patch) จาก GitHub — เครื่องที่ติดตั้งแล้วได้ประเภทเอกสารใหม่/แก้รูปแบบ โดยไม่ต้องติดตั้งใหม่
+อัปเดตจาก GitHub — เครื่องที่ติดตั้งแล้วได้ประเภทเอกสารใหม่/แก้รูปแบบ โดยไม่ต้องติดตั้งใหม่
+(หลักการเดียวกับระบบตรวจเล่ม e-thesis checker)
 
-ผู้พัฒนา: ปล่อยรุ่นใหม่ด้วย `python tools/release.py "หัวข้อ" -i "รายละเอียด" ...`
-           (เพิ่ม version 1.x + build ใน version.json, commit, push และสร้างโฟลเดอร์ "อัปเดต version 1.x")
-เครื่องผู้ใช้อัปเดตได้ 2 ทาง (ใช้ apply_tree ตัวเดียวกัน):
-    1. ในโปรแกรม: เช็ก version.json บน GitHub ตอนเปิด ถ้า build ใหม่กว่า แสดงแถบ "มีอัปเดตใหม่" → อัปเดตเลย
-    2. โฟลเดอร์ "อัปเดต version 1.x" (ไม่ต้องใช้อินเทอร์เน็ต): ดับเบิลคลิกไฟล์ "คลิกเพื่ออัปเดต…" (tools/package/update.ps1)
-    (หรือบรรทัดคำสั่ง: python -m core.update [--zip ไฟล์.zip])
-เลขเวอร์ชันที่ผู้ใช้เห็นคือ "version" (1.0, 1.1, …) — โปรแกรมเทียบรุ่นด้วย "build" (เลขจำนวนเต็ม เพิ่มทีละ 1)
+**ติดตั้งเฉพาะรุ่นที่ออกแล้ว:** ทุกรุ่นมีป้าย (git tag) `v<เลข>` ที่ tools/release.py ติดให้ — เครื่องผู้ใช้ดาวน์โหลด
+ZIP ของป้ายนั้น ไม่ใช่ของ branch main ตรง ๆ งานที่ push ขึ้น main แต่ยังไม่ออกรุ่นจึงไม่ลงเครื่องที่ใช้งาน
+
+ผู้พัฒนา: ออกรุ่นด้วย `python tools/release.py "หัวข้อ" -i "รายละเอียด" ...` (version.json + CHANGELOG.md + ป้าย v<เลข>
+           + โฟลเดอร์ "อัปเดต version 1.x") แล้ว push เมื่อเจ้าของสั่ง: `python tools/release.py --push`
+เครื่องผู้ใช้อัปเดตได้ 3 ทาง (ทุกทางติดตั้งด้วย apply_tree ของ "รุ่นใหม่" — ตัวติดตั้งรุ่นเก่าไม่ต้องรู้จักไฟล์ใหม่):
+    1. ในโปรแกรม: เช็กตอนเปิด (จำผล 30 นาที) ถ้ามีรุ่นที่ออกแล้วใหม่กว่า แสดงแถบ "มีอัปเดตใหม่" → อัปเดตเลย
+    2. ดับเบิลคลิก `อัปเดตระบบปรับเอกสาร.bat` ในโฟลเดอร์โปรแกรม (ไม่ต้องเปิดโปรแกรม)
+    3. แบบ manual ไม่ต้องใช้อินเทอร์เน็ต: โฟลเดอร์ "อัปเดต version 1.x" (คลิกเพื่ออัปเดต…bat) หรือแตก ZIP ของรุ่นนั้น
+       (เช่นจาก GitHub) แล้วดับเบิลคลิก `ติดตั้งอัปเดตจากโฟลเดอร์นี้.bat` — tools/package/update.ps1 หาโปรแกรมในเครื่องเอง
+    (บรรทัดคำสั่ง: python -m core.update [--check] [--zip ไฟล์.zip] [--fetch โฟลเดอร์])
+เลขเวอร์ชันที่ผู้ใช้เห็นคือ "version" (1.0, 1.1, 1.1.1 …) — โปรแกรมเทียบรุ่นด้วย "build" (เลขจำนวนเต็ม เพิ่มทีละ 1)
+รุ่นที่ติดตั้งอยู่บันทึกใน .update/installed.json (รุ่น, ป้าย, ติดตั้งจากไหน, เวลา)
 
 สิ่งที่ไม่ถูกเขียนทับ:
     - ไฟล์เฉพาะเครื่อง (LOCAL_ONLY): settings.json, converted.json, translations.json, samples/, ไอคอน .lnk
     - ไฟล์ข้อมูล doctypes/*/data/*.json: รวมแบบ 3 ทาง — เทียบกับฉบับที่ติดตั้งครั้งก่อน (.update/base/)
-      ค่าที่เครื่องนี้แก้/เรียนรู้เองชนะ, ค่าที่ผู้พัฒนาแก้ใน patch ก็ได้มาด้วย
-ไฟล์ที่ patch ก่อนหน้าติดตั้งแต่ patch ใหม่ไม่มีแล้ว จะถูกลบ (เฉพาะไฟล์ที่อยู่ในรายการติดตั้งของ patch ก่อน)
+      ค่าที่เครื่องนี้แก้/เรียนรู้เองชนะ, ค่าที่ผู้พัฒนาแก้ในรุ่นใหม่ก็ได้มาด้วย
+ไฟล์ที่รุ่นก่อนหน้าติดตั้งแต่รุ่นใหม่ไม่มีแล้ว จะถูกลบ (เฉพาะไฟล์ที่อยู่ในรายการติดตั้งของรุ่นก่อน)
 เครื่องพัฒนา (มีโฟลเดอร์ .git) ไม่อัปเดตด้วยวิธีนี้ — ใช้ git pull
 """
+import datetime as dt
 import fnmatch
 import hashlib
 import json
@@ -24,6 +32,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -33,15 +43,31 @@ from core import BASE
 REPO = "supawitmar/as-document"
 BRANCH = "main"
 VERSION_FILE = BASE / "version.json"
-STATE = BASE / ".update"                  # ฉบับที่ติดตั้งครั้งก่อน (base สำหรับรวมข้อมูล) + รายการไฟล์
+STATE = BASE / ".update"                  # ฉบับที่ติดตั้งครั้งก่อน (base สำหรับรวมข้อมูล) + รายการไฟล์ + รุ่นที่ติดตั้ง
 LOCAL_ONLY = ["settings.json", "converted.json", "translations.json", "*/translations.json", "*.migrated",
               "*.lnk", "doctypes/*/samples/*", ".update/*", ".git/*", "__pycache__/*", "*/__pycache__/*",
-              "assets/example_*"]
+              "assets/example_*", "dist/*"]
 DATA_FILES = ["doctypes/*/data/*.json"]
+CHECK_TTL = 30 * 60                      # จำผลเช็กอัปเดต 30 นาที (ไม่ถาม GitHub ทุกครั้งที่เปิดหน้า)
+_cache = {"at": 0.0, "result": None}
 
 
-def raw_url(path: str) -> str:
-    return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{path}"
+def raw_url(path: str, ref: str = BRANCH) -> str:
+    return f"https://raw.githubusercontent.com/{REPO}/{ref}/{path}"
+
+
+def tag_of(version: str) -> str:
+    return f"v{version}"
+
+
+def zip_url(version: str) -> str:
+    """ZIP ของรุ่นที่ออกแล้ว (ป้าย v<เลข>)"""
+    return f"https://github.com/{REPO}/archive/refs/tags/{tag_of(version)}.zip"
+
+
+def _get_json(url: str, timeout: float):
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
 
 
 def version_label(build: int, version: str = "") -> str:
@@ -63,21 +89,42 @@ def is_dev_checkout() -> bool:
     return (BASE / ".git").exists()
 
 
-def check(timeout: float = 6) -> dict:
+def latest_release(cur_build: int, timeout: float = 6):
+    """รุ่นล่าสุดที่ "ออกแล้ว" (มีป้าย v<เลข> บน GitHub) และใหม่กว่า cur_build — ไม่มี = None
+    ดูรายการรุ่นจาก version.json ของ main แล้วยืนยันว่ามีป้ายจริงด้วย version.json ของป้ายนั้น
+    (รุ่นที่ commit แล้วแต่ยังไม่ push ป้าย = ยังไม่ออก ข้ามไปดูรุ่นก่อนหน้า)"""
+    head = _get_json(raw_url("version.json") + f"?t={int(time.time() // CHECK_TTL)}", timeout)
+    cands = [c for c in head.get("changes", []) if int(c.get("build", 0)) > cur_build and c.get("version")]
+    for c in sorted(cands, key=lambda c: -int(c["build"]))[:5]:
+        try:
+            tagged = _get_json(raw_url("version.json", tag_of(c["version"])), timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            raise
+        if int(tagged.get("build", 0)) > cur_build:
+            return tagged
+    return None
+
+
+def check(timeout: float = 6, force: bool = False) -> dict:
     """{'available', 'current', 'latest', 'version', 'latest_version', 'changes': [รุ่นที่ใหม่กว่า], 'dev', 'error'}"""
+    if not force and _cache["result"] and time.time() - _cache["at"] < CHECK_TTL:
+        return _cache["result"]
     cur = read_version()
     out = {"available": False, "current": cur["build"], "latest": cur["build"], "version": cur["version"],
            "latest_version": cur["version"], "changes": [], "dev": is_dev_checkout(), "error": ""}
     try:
-        with urllib.request.urlopen(raw_url("version.json") + f"?t={cur['build']}", timeout=timeout) as r:
-            latest = json.loads(r.read().decode("utf-8"))
-    except Exception as e:          # ไม่มีอินเทอร์เน็ต ฯลฯ — ใช้งานต่อได้ตามปกติ
+        rel = latest_release(cur["build"], timeout)
+    except Exception as e:          # ไม่มีอินเทอร์เน็ต ฯลฯ — ใช้งานต่อได้ตามปกติ (ไม่จำผลที่ผิดพลาด)
         out["error"] = str(e)
         return out
-    out["latest"] = int(latest.get("build", 0))
-    out["latest_version"] = version_label(out["latest"], latest.get("version", ""))
-    out["changes"] = [c for c in latest.get("changes", []) if int(c.get("build", 0)) > cur["build"]]
-    out["available"] = out["latest"] > cur["build"] and not out["dev"]
+    if rel:
+        out["latest"] = int(rel.get("build", 0))
+        out["latest_version"] = version_label(out["latest"], rel.get("version", ""))
+        out["changes"] = [c for c in rel.get("changes", []) if int(c.get("build", 0)) > cur["build"]]
+        out["available"] = not out["dev"]
+    _cache.update(at=time.time(), result=out)
     return out
 
 
@@ -93,7 +140,7 @@ def _read_json(p: Path):
 
 
 def merge_data(local, new, base):
-    """รวมไฟล์ข้อมูล JSON แบบ 3 ทาง (dict): ค่าที่เครื่องนี้เปลี่ยนจาก base ชนะ ที่เหลือใช้ของ patch ใหม่"""
+    """รวมไฟล์ข้อมูล JSON แบบ 3 ทาง (dict): ค่าที่เครื่องนี้เปลี่ยนจาก base ชนะ ที่เหลือใช้ของรุ่นใหม่"""
     if not isinstance(local, dict) or not isinstance(new, dict):
         return new if local is None or local == base else local
     base = base if isinstance(base, dict) else {}
@@ -102,7 +149,7 @@ def merge_data(local, new, base):
         if k not in base or base[k] != v:            # เครื่องนี้เพิ่ม/แก้เอง
             merged[k] = v
     for k in base:
-        if k not in local and k in merged and merged[k] == base[k]:   # เครื่องนี้ลบเอง (และ patch ไม่ได้แก้)
+        if k not in local and k in merged and merged[k] == base[k]:   # เครื่องนี้ลบเอง (และรุ่นใหม่ไม่ได้แก้)
             del merged[k]
     return merged
 
@@ -111,11 +158,14 @@ def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def apply_tree(src: Path, dest: Path = BASE, log=print) -> dict:
-    """คัดลอกโปรแกรมจากโฟลเดอร์ src (ที่แตกจาก ZIP) ทับโฟลเดอร์ที่ติดตั้ง dest"""
+def apply_tree(src: Path, dest: Path = BASE, log=print, source: str = "") -> dict:
+    """คัดลอกโปรแกรมจากโฟลเดอร์ src (ที่แตกจาก ZIP) ทับโฟลเดอร์ที่ติดตั้ง dest
+    เขียนเฉพาะไฟล์ที่ต่าง · ไม่แตะไฟล์เฉพาะเครื่อง · รวม data/*.json แบบ 3 ทาง · ลบเฉพาะไฟล์ในรายการของรุ่นก่อน"""
     src, dest = Path(src), Path(dest)
     if (dest / ".git").exists():
         raise RuntimeError(f"{dest} เป็นเครื่องพัฒนา (มี .git) — อัปเดตด้วย git pull")
+    if src.resolve() == dest.resolve():
+        raise RuntimeError("โฟลเดอร์นี้คือโปรแกรมที่ติดตั้งอยู่แล้ว — ใช้ อัปเดตระบบปรับเอกสาร.bat แทน")
     state = dest / STATE.name
     old_manifest = set(_read_json(state / "manifest.json") or [])
     files = [p for p in src.rglob("*") if p.is_file()]
@@ -132,7 +182,7 @@ def apply_tree(src: Path, dest: Path = BASE, log=print) -> dict:
             new, local, base = _read_json(s), _read_json(d), _read_json(state / "base" / rel)
             if new is not None and local is not None and local != new:
                 result = merge_data(local, new, base)
-                sort = isinstance(new, dict) and list(new) == sorted(new)        # คงรูปแบบไฟล์ของ patch
+                sort = isinstance(new, dict) and list(new) == sorted(new)        # คงรูปแบบไฟล์ของรุ่นใหม่
                 d.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=sort), encoding="utf-8")
                 merged.append(rel)
             elif new is not None and local is None:
@@ -141,17 +191,25 @@ def apply_tree(src: Path, dest: Path = BASE, log=print) -> dict:
             shutil.copy2(s, d)
             changed.append(rel)
         installed.append(rel)
-        if _match(rel, DATA_FILES):           # เก็บฉบับของ patch ไว้เป็น base ของการรวมครั้งหน้า
+        if _match(rel, DATA_FILES):           # เก็บฉบับของรุ่นใหม่ไว้เป็น base ของการรวมครั้งหน้า
             b = state / "base" / rel
             b.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(s, b)
-    for rel in sorted(old_manifest - set(installed)):      # ไฟล์ที่ patch ใหม่เอาออกแล้ว
+    for rel in sorted(old_manifest - set(installed)):      # ไฟล์ที่รุ่นใหม่เอาออกแล้ว
         p = dest / rel
         if p.is_file() and not _match(rel, LOCAL_ONLY + DATA_FILES):
             p.unlink()
             removed.append(rel)
+            for parent in p.parents:                       # โฟลเดอร์ที่ว่างลงเพราะไฟล์ถูกเอาออก
+                if parent == dest or not parent.is_relative_to(dest) or any(parent.iterdir()):
+                    break
+                parent.rmdir()
     state.mkdir(exist_ok=True)
     (state / "manifest.json").write_text(json.dumps(installed, ensure_ascii=False, indent=0), encoding="utf-8")
+    v = read_version(dest / VERSION_FILE.name)
+    (state / "installed.json").write_text(json.dumps(
+        {"version": v["version"], "build": v["build"], "tag": tag_of(v["version"]), "source": source or str(src),
+         "installed_at": dt.datetime.now().isoformat(timespec="seconds")}, ensure_ascii=False, indent=2), encoding="utf-8")
     pip = ""
     if req.exists() and _sha(req) != req_before:
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--upgrade", "--disable-pip-version-check",
@@ -162,27 +220,53 @@ def apply_tree(src: Path, dest: Path = BASE, log=print) -> dict:
     return {"changed": changed, "merged": merged, "removed": removed, "pip_error": pip}
 
 
+def fetch(workdir: Path, zip_path: Path = None, log=print) -> Path:
+    """ดาวน์โหลดรุ่นล่าสุดที่ออกแล้ว (หรือใช้ zip_path) แตกไว้ใน workdir คืนโฟลเดอร์โปรแกรมรุ่นใหม่"""
+    workdir = Path(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    z = workdir / "src.zip"
+    expect = ""
+    if zip_path:
+        shutil.copy(zip_path, z)
+    else:
+        rel = latest_release(read_version()["build"])
+        if not rel:
+            raise RuntimeError(f"เป็นรุ่นล่าสุดที่ออกแล้ว (version {read_version()['version']})")
+        expect = version_label(int(rel.get("build", 0)), rel.get("version", ""))
+        log(f"กำลังดาวน์โหลด version {expect}…")
+        with urllib.request.urlopen(zip_url(expect), timeout=120) as r:
+            z.write_bytes(r.read())
+    with zipfile.ZipFile(z) as zf:
+        zf.extractall(workdir / "x")
+    roots = [p for p in (workdir / "x").iterdir() if p.is_dir()]
+    if len(roots) != 1 or not (roots[0] / "app.py").exists() or not (roots[0] / "core" / "update.py").exists():
+        raise RuntimeError("ไฟล์อัปเดตไม่ถูกต้อง (ไม่พบ app.py / core/update.py)")
+    got = read_version(roots[0] / VERSION_FILE.name)["version"]
+    if expect and got != expect:
+        raise RuntimeError(f"ไฟล์ที่ดาวน์โหลดเป็น version {got} ไม่ใช่ {expect}")
+    return roots[0]
+
+
+def install_with_new(tree: Path, dest: Path = BASE, source: str = "") -> dict:
+    """ติดตั้งด้วยตัวอัปเดตของรุ่นใหม่ (python -m core.update --tree ในโฟลเดอร์รุ่นใหม่) — ตัวติดตั้งรุ่นเก่า
+    ไม่ต้องรู้จักไฟล์/กฎใหม่ของรุ่นถัดไป"""
+    r = subprocess.run([sys.executable, "-X", "utf8", "-m", "core.update", "--tree", str(tree), "--dest", str(dest),
+                        "--source", source, "--json"], cwd=str(tree), capture_output=True, text=True, encoding="utf-8")
+    line = next((ln for ln in reversed(r.stdout.splitlines()) if ln.startswith("{")), "")
+    if r.returncode or not line:
+        raise RuntimeError((r.stderr or r.stdout).strip()[-400:] or "ตัวอัปเดตของรุ่นใหม่ทำงานไม่สำเร็จ")
+    return json.loads(line)
+
+
 def apply(zip_path: Path = None, log=print) -> dict:
-    """ดาวน์โหลด (หรือใช้ zip_path) แล้วติดตั้งทับ — คืนผล apply_tree + build ใหม่"""
+    """ดาวน์โหลดรุ่นล่าสุดที่ออกแล้ว (หรือใช้ zip_path) แล้วติดตั้งทับ — คืนผล apply_tree + รุ่นใหม่"""
     if is_dev_checkout():
         raise RuntimeError("เครื่องนี้เป็นเครื่องพัฒนา (มี .git) — อัปเดตด้วย git pull")
     with tempfile.TemporaryDirectory(prefix="docupdate_") as t:
-        t = Path(t)
-        z = t / "src.zip"
-        if zip_path:
-            shutil.copy(zip_path, z)
-        else:
-            log("กำลังดาวน์โหลด…")
-            with urllib.request.urlopen(f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip", timeout=60) as r:
-                z.write_bytes(r.read())
-        with zipfile.ZipFile(z) as zf:
-            zf.extractall(t / "x")
-        roots = [p for p in (t / "x").iterdir() if p.is_dir()]
-        if len(roots) != 1 or not (roots[0] / "app.py").exists() or not (roots[0] / "version.json").exists():
-            raise RuntimeError("ไฟล์อัปเดตไม่ถูกต้อง (ไม่พบ app.py / version.json)")
-        res = apply_tree(roots[0], log=log)
-    v = read_version()
-    res["build"], res["version"] = v["build"], v["version"]
+        tree = fetch(Path(t), zip_path, log=log)
+        tag = tag_of(read_version(tree / VERSION_FILE.name)["version"])
+        res = install_with_new(tree, BASE, source=str(zip_path) if zip_path else f"GitHub {tag}")
+    _cache.update(at=0.0, result=None)
     return res
 
 
@@ -193,22 +277,35 @@ def main(argv=None) -> int:
             stream.reconfigure(encoding="utf-8")
         except (AttributeError, ValueError):
             pass
-    ap = argparse.ArgumentParser(description="อัปเดตโปรแกรมจาก GitHub")
+    ap = argparse.ArgumentParser(description="อัปเดตโปรแกรมจาก GitHub (เฉพาะรุ่นที่ออกแล้ว)")
     ap.add_argument("--zip", help="ใช้ไฟล์ ZIP ที่ดาวน์โหลดไว้แล้ว (แทนการดาวน์โหลด)")
-    ap.add_argument("--tree", help="ใช้โฟลเดอร์ที่แตก ZIP ไว้แล้ว (get.ps1 ใช้ตอนอัปเดตเครื่องที่ติดตั้งไว้)")
+    ap.add_argument("--tree", help="ใช้โฟลเดอร์ที่แตก ZIP ไว้แล้ว (update.ps1 / get.ps1 ใช้)")
     ap.add_argument("--dest", help="โฟลเดอร์ที่ติดตั้ง (ใช้กับ --tree; ค่าเริ่มต้น = โฟลเดอร์ของโปรแกรมนี้)")
     ap.add_argument("--check", action="store_true", help="เช็กอย่างเดียว")
+    ap.add_argument("--fetch", metavar="DIR", help="ดาวน์โหลดรุ่นล่าสุดที่ออกแล้วแตกไว้ใน DIR แล้วพิมพ์ path (update.ps1 ใช้)")
+    ap.add_argument("--source", default="", help="บันทึกว่าติดตั้งจากไหน (ลง .update/installed.json)")
+    ap.add_argument("--json", action="store_true", help="พิมพ์ผลเป็น JSON บรรทัดสุดท้าย")
     args = ap.parse_args(argv)
     if args.check:
-        print(json.dumps(check(), ensure_ascii=False, indent=2))
+        print(json.dumps(check(force=True), ensure_ascii=False, indent=2))
+        return 0
+    if args.fetch:
+        try:
+            print(fetch(Path(args.fetch), Path(args.zip) if args.zip else None))
+        except RuntimeError as e:
+            print(f"!! {e}")
+            return 3
         return 0
     if args.tree:
         dest = Path(args.dest) if args.dest else BASE
-        r = apply_tree(Path(args.tree), dest)
+        r = apply_tree(Path(args.tree), dest, source=args.source)
         v = read_version(dest / VERSION_FILE.name)          # อ่านหลังติดตั้ง = รุ่นใหม่
         r.update(build=v["build"], version=v["version"])
     else:
         r = apply(Path(args.zip) if args.zip else None)
+    if args.json:
+        print(json.dumps(r, ensure_ascii=False))
+        return 0
     print(f"version {r['version']} (build {r['build']}): อัปเดต {len(r['changed'])} ไฟล์, "
           f"รวมข้อมูล {len(r['merged'])}, ลบ {len(r['removed'])}")
     if r["pip_error"]:

@@ -25,7 +25,18 @@ try {
     if ($ZipPath) {
         Copy-Item -LiteralPath $ZipPath -Destination $zip
     } else {
-        $url = "https://github.com/$Repo/archive/refs/heads/$Branch.zip"
+        # Install only a RELEASED version (git tag v<version>), never unreleased work on main:
+        # read the release list from version.json on main, then download the newest version that has a tag.
+        $url = ""
+        try {
+            $vj = Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$Repo/$Branch/version.json" -UseBasicParsing
+            foreach ($c in @($vj.changes)) {
+                if (-not $c.version) { continue }
+                $try = "https://github.com/$Repo/archive/refs/tags/v$($c.version).zip"
+                try { Invoke-WebRequest -Uri $try -Method Head -UseBasicParsing | Out-Null; $url = $try; break } catch {}
+            }
+        } catch {}
+        if (-not $url) { $url = "https://github.com/$Repo/archive/refs/heads/$Branch.zip" }   # no released tag yet
         Write-Host "1) Downloading $url"
         Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
     }
