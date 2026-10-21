@@ -18,6 +18,9 @@ TAB = "tab-stops:2.0cm"
 INDENT = ("<span style='mso-spacerun:yes'> </span>"
           "<span style='mso-tab-count:1'>               </span>")
 SIGN_CENTER = 0.75     # แกนกลางของบล็อกลายมือชื่อ (สัดส่วนจากขอบซ้ายของพื้นที่พิมพ์) ตามไฟล์ตัวอย่าง
+# บรรทัด เรียน/Dear ที่ยาวเกิน 1 บรรทัด: บรรทัดต่อไปเยื้องเข้า 8 เว้นวรรค (27.7pt ≈ 1 ซม. วัดจาก PDF ที่ Word สร้าง)
+# ตามไฟล์ตัวอย่าง (ปรับ) 19 ต.ค. 2569
+TO_HANG = "margin-left:27.7pt;text-indent:-27.7pt;"
 
 DOC_TYPES = {
     # ย่อหน้าว่างหลังคำลงท้าย, ย่อหน้าว่างท้ายเอกสาร, ระยะห่างตัวอักษรของย่อหน้าแรกหลังตาราง
@@ -36,9 +39,8 @@ EN_TYPES = {
 }
 
 
-def para(content: str, align: str = "", line_height=True, justify="", space_after=False) -> str:
+def para(content: str, align: str = "", line_height=True, justify="", space_after=False, style="") -> str:
     """justify: "" | "thai" (กระจายแบบ inter-cluster) | "plain" """
-    style = ""
     attr = ""
     if align:
         attr = f" align={align}"
@@ -53,9 +55,9 @@ def para(content: str, align: str = "", line_height=True, justify="", space_afte
     return f"<p class=MsoNormal{attr} style='{style}'><span lang=TH style='{FONT}'>{content}<o:p></o:p></span></p>\n\n"
 
 
-def para_en(content: str, align="", justify=False, margin_bottom=0, tab_stop="", font=FONT) -> str:
+def para_en(content: str, align="", justify=False, margin_bottom=0, tab_stop="", font=FONT, style="") -> str:
     """ย่อหน้าภาษาอังกฤษ: ระยะบรรทัดปกติ (single) ตามไฟล์ตัวอย่าง (EN)"""
-    style = f"margin-bottom:{margin_bottom}.0pt;" if margin_bottom else ""
+    style += f"margin-bottom:{margin_bottom}.0pt;" if margin_bottom else ""
     attr = f" align={align}" if align else ""
     if align:
         style += f"text-align:{align};"
@@ -75,7 +77,7 @@ def build_html_en(L: Letter, logo_src: str) -> str:
            para_en(lines_html(L.address), align="center"),
            para_en(lines_html([x for x in (h.get("ref"), h.get("date"), h.get("subject")) if x]))]
     if h.get("to"):
-        out.append(para_en("<br>\n" + esc(h["to"])))
+        out += [para_en("&nbsp;"), para_en(esc(h["to"]), style=TO_HANG)]
     for p in L.body:
         out.append(para_en("<br>\n" + indent13 + esc(p), justify=True))
 
@@ -107,7 +109,8 @@ def build_html(L: Letter, logo_src: str) -> str:
     out = [para(f'<img width=90 height=90 src="{logo_src}">', align="center", line_height=False)]
     if L.address:
         out.append(para(lines_html(L.address), align="right", line_height=False))
-    out.append(para(lines_html(["", h.get("ref", ""), h.get("date", ""), h.get("subject", ""), "", h.get("to", "")])))
+    out.append(para(lines_html(["", h.get("ref", ""), h.get("date", ""), h.get("subject", "")])))
+    out += [para("&nbsp;"), para(esc(h.get("to", "")) or "&nbsp;", style=TO_HANG)]
     for p in L.body:
         out.append(para("<br>\n" + INDENT + esc(p), justify="thai"))
 
@@ -135,6 +138,8 @@ def build_html(L: Letter, logo_src: str) -> str:
 def render_letters(entries: list, pdf=False, keep_doc=False, log=print, fmt=None) -> list:
     """สร้างไฟล์จาก Letter ที่จัดรูปแบบแล้ว
     entries: [{'src': Path, 'letter': Letter, 'outdir': Path, 'stem': str, 'notes': [...]}]"""
+    # tighten: คำเดียวตกบรรทัดท้ายย่อหน้า → Word บีบตัวอักษรบรรทัดก่อนหน้าให้คำนั้นขึ้นไปอยู่ด้วย (assets/to_docx.ps1)
     jobs = [dict(src=e["src"], outdir=e["outdir"], stem=e["stem"], notes=e["notes"], kind=kind_name(e["letter"]),
-                 attach=e.get("attach") or [], build=lambda logo, L=e["letter"]: build_html(L, logo)) for e in entries]
+                 attach=e.get("attach") or [], tighten=True,
+                 build=lambda logo, L=e["letter"]: build_html(L, logo)) for e in entries]
     return render.render(jobs, pdf=pdf, keep_doc=keep_doc, log=log, fmt=fmt)
