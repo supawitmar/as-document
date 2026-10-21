@@ -7,9 +7,13 @@
         และสรุปค่าที่ใช้บ่อย (ฟอนต์หลัก, ตำแหน่งย่อหน้า, ระยะบรรทัด, ขอบกระดาษ) — เอาไปตั้งค่าใน layout.py
 
     python tools/learn.py compare <ของเรา> <ตัวอย่าง> [-o โฟลเดอร์]
-        แปลงทั้งสองไฟล์เป็นภาพทีละหน้า วัดเปอร์เซ็นต์พิกเซลที่ต่างกัน และบันทึกภาพ
-        <หน้า>-side.png (วางคู่ ซ้าย=ของเรา ขวา=ตัวอย่าง) และ <หน้า>-diff.png (แดง=ต่าง) ไว้ตรวจด้วยตา
-        ต่างกันราว 1% = ระยะคำ/การตัดบรรทัด, มากกว่านั้น = ระยะหรือตำแหน่งยังไม่ตรง
+        เทียบ 2 แบบต่อหน้า:
+        1. ตำแหน่งบรรทัด (ตัววัดหลัก): จับคู่บรรทัดที่ข้อความตรงกัน แล้ววัดว่าตำแหน่งต่างกันกี่ pt
+           + รายการบรรทัดที่ข้อความต่าง — ใช้ได้แม้ระยะห่างตัวอักษรในบรรทัดต่างกันเล็กน้อย
+           เกณฑ์ผ่าน: บรรทัดตรงเกือบทั้งหมด และคลาดเคลื่อนไม่เกิน ~1 pt (ข้อความต่างต้องอธิบายได้ทุกบรรทัด)
+        2. พิกเซล: เปอร์เซ็นต์พื้นที่ตัวอักษรที่ต่าง + ภาพ <หน้า>-side.png (ซ้าย=ของเรา ขวา=ตัวอย่าง)
+           และ <หน้า>-diff.png (แดง=ต่าง) ไว้ตรวจด้วยตา — ตัวเลขนี้สูงได้มาก (30–70%) แม้หน้าตาเหมือนกัน
+           ถ้าการกระจายตัวอักษรแบบไทยต่างกันเล็กน้อย ใช้ได้ตรงเฉพาะไฟล์ที่ Word สร้างจากต้นทางเดียวกัน (~1% = ระยะคำ)
 
 ไฟล์ .docx / .doc / .htm จะถูกแปลงเป็น PDF ด้วย Microsoft Word ก่อน (ต้องมี Word)
 ไฟล์ตัวอย่างจริงมีข้อมูลบุคคล — เก็บไว้ที่ doctypes/<ประเภท>/samples/ (ไม่อยู่ใน git)
@@ -90,6 +94,38 @@ def cmd_inspect(path: Path):
         print(f"ระยะบรรทัดมัธยฐาน ≈ {statistics.median(g for g, n in gaps.items() for _ in range(n)):.1f}pt")
 
 
+def page_lines(page) -> list:
+    """[(y บน, x ของคำแรก, ข้อความ)] ของทุกบรรทัดที่มองเห็นในหน้า เรียงจากบนลงล่าง
+    รวมคำที่อยู่แนวเดียวกัน (ป้าย + ค่าที่อยู่คนละย่อหน้า/คนละ tab) เป็นบรรทัดเดียว และวัดตำแหน่งจากคำแรกจริง
+    (ไม่นับช่องว่างที่เคาะนำหน้า — ไฟล์ตัวอย่างหลายฉบับจัดลายมือชื่อด้วยการเคาะเว้นวรรค)"""
+    rows = []
+    for x0, y0, x1, y1, word, *_ in sorted(page.get_text("words"), key=lambda w: ((w[1] + w[3]) / 2, w[0])):
+        mid = (y0 + y1) / 2
+        if rows and abs(rows[-1]["mid"] - mid) < 3:
+            rows[-1]["words"].append((x0, word))
+            rows[-1]["y"] = min(rows[-1]["y"], y0)
+        else:
+            rows.append({"mid": mid, "y": y0, "words": [(x0, word)]})
+    return [(r["y"], min(x for x, _ in r["words"]), " ".join(w for _, w in sorted(r["words"]))) for r in rows]
+
+
+def compare_lines(a: list, b: list) -> dict:
+    """จับคู่บรรทัดตามลำดับข้อความ (difflib) แล้ววัดระยะต่างของบรรทัดที่ข้อความตรงกัน"""
+    import difflib
+    sm = difflib.SequenceMatcher(a=[t for *_, t in a], b=[t for *_, t in b], autojunk=False)
+    pairs, only_ours, only_sample = [], [], []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "equal":
+            pairs += [(a[i], b[j]) for i, j in zip(range(i1, i2), range(j1, j2))]
+        else:
+            only_ours += [t for *_, t in a[i1:i2]]
+            only_sample += [t for *_, t in b[j1:j2]]
+    dy = [abs(x[0] - y[0]) for x, y in pairs]
+    dx = [abs(x[1] - y[1]) for x, y in pairs]
+    return {"matched": len(pairs), "ours": len(a), "sample": len(b), "max_dy": max(dy, default=0), "max_dx": max(dx, default=0),
+            "only_ours": only_ours, "only_sample": only_sample}
+
+
 def cmd_compare(ours: Path, sample: Path, outdir: Path):
     import pymupdf
     from PIL import Image, ImageChops
@@ -113,7 +149,14 @@ def cmd_compare(ours: Path, sample: Path, outdir: Path):
             side.save(outdir / f"{i + 1}-side.png")
             red = Image.new("RGB", ia.size, (230, 40, 40))
             Image.composite(red, ia.convert("L").convert("RGB"), diff).save(outdir / f"{i + 1}-diff.png")
-            print(f"หน้า {i + 1}: ต่างกัน {pct:.1f}% ของพื้นที่ตัวอักษร  -> {outdir / f'{i + 1}-side.png'}")
+            r = compare_lines(page_lines(a[i]), page_lines(b[i]))
+            print(f"หน้า {i + 1}: บรรทัดข้อความตรงกัน {r['matched']}/{max(r['ours'], r['sample'])} · "
+                  f"ตำแหน่งคลาดเคลื่อนสูงสุด แนวตั้ง {r['max_dy']:.1f} pt / แนวนอน {r['max_dx']:.1f} pt")
+            for t in r["only_ours"][:8]:
+                print(f"     มีเฉพาะของเรา : {t[:90]}")
+            for t in r["only_sample"][:8]:
+                print(f"     มีเฉพาะตัวอย่าง: {t[:90]}")
+            print(f"     พิกเซลต่างกัน {pct:.1f}% ของพื้นที่ตัวอักษร (ดูภาพ) -> {outdir / f'{i + 1}-side.png'}")
         a.close()
         b.close()
 
