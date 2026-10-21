@@ -692,9 +692,12 @@ function rowHtml(it) {
 const today = () => { const t = new Date(); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); };
 const formFields = (d = dt()) => ((d.form || {}).sections || []).flatMap((sec) => sec.fields || []);
 function formDefaults(d = dt()) {
-  const mem = ((state.settings.form_memory || {})[d.id]) || {};
+  // ลำดับ: ค่าที่จำไว้ (remember) > ค่าเริ่มต้นที่ประเภทเอกสารคำนวณให้ (manifest: form_defaults) > default ของช่อง
+  const mem = ((state.settings.form_memory || {})[d.id]) || {}, pre = d.form_defaults || {};
+  const fallback = (f) => (pre[f.key] != null && pre[f.key] !== "" ? String(pre[f.key])
+    : f.default === "today" ? today() : f.default != null ? String(f.default) : "");
   return Object.fromEntries(formFields(d).map((f) => [f.key,
-    f.remember && mem[f.key] != null && mem[f.key] !== "" ? mem[f.key] : f.default === "today" ? today() : f.default != null ? String(f.default) : ""]));
+    f.remember && mem[f.key] != null && mem[f.key] !== "" ? mem[f.key] : fallback(f)]));
 }
 function formState(d = dt()) {
   if (!state.forms[d.id]) state.forms[d.id] = { values: formDefaults(d), check: null, touched: new Set(), tried: false, result: null };
