@@ -65,8 +65,8 @@ class Check(unittest.TestCase):
         r = DOCTYPE.check_form(VALUES)
         self.assertTrue(r["ok"])
         self.assertEqual([o["name"] for o in r["outputs_preview"]],
-                         ["ขยายส่งเล่ม 6512345 EGCH-M นางสาวสมหญิง รักเรียน",
-                          "บันทึกขออนุมัติขยายส่งเล่ม 6512345 EGCH-M นางสาวสมหญิง รักเรียน"])
+                         ["บันทึกขออนุมัติขยายส่งเล่ม 6512345 EGCH-M นางสาวสมหญิง รักเรียน",
+                          "ขยายส่งเล่ม 6512345 EGCH-M นางสาวสมหญิง รักเรียน"])     # บันทึกข้อความมาก่อน
         self.assertFalse(DOCTYPE.check_form({})["ok"])
 
 

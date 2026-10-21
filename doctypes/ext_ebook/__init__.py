@@ -60,7 +60,7 @@ class ExtEbook(DocType):
         out = {"ok": not errors, "errors": errors, "warnings": warnings, "outputs_preview": []}
         if not errors:
             a, b = output_stems(make_request(values))
-            out["outputs_preview"] = [{"name": a, "kind": KIND_A}, {"name": b, "kind": KIND_B}]
+            out["outputs_preview"] = [{"name": b, "kind": KIND_B}, {"name": a, "kind": KIND_A}]
         return out
 
     def prefill_form(self, path: Path) -> dict:
@@ -74,10 +74,11 @@ class ExtEbook(DocType):
         r = make_request(values)
         office, signer = load_data()
         stem_a, stem_b = output_stems(r)
-        entries = [dict(src=Path(stem_a), outdir=outdir, stem=stem_a, kind=KIND_A, notes=list(warnings),
-                        build=lambda logo: layout.build_a(r, office, signer)),
-                   dict(src=Path(stem_b), outdir=outdir, stem=stem_b, kind=KIND_B, notes=[],
-                        build=lambda logo: layout.build_b(r, office, signer, logo))]
+        # บันทึกข้อความ (B) มาก่อน — ลำดับแท็บดูตัวอย่าง/รายการผลลัพธ์ในหน้าโปรแกรม (ผู้ใช้ขอ 21 ต.ค. 2569)
+        entries = [dict(src=Path(stem_b), outdir=outdir, stem=stem_b, kind=KIND_B, notes=list(warnings),
+                        build=lambda logo: layout.build_b(r, office, signer, logo)),
+                   dict(src=Path(stem_a), outdir=outdir, stem=stem_a, kind=KIND_A, notes=[],
+                        build=lambda logo: layout.build_a(r, office, signer))]
         fmt = "both" if pdf == "both" else "pdf" if pdf else "docx"
         res = render.render(entries, log=log, fmt=fmt)
         outputs = [{"kind": x["kind"], "label": x["kind"], "docx": x["docx"], "pdf": x["pdf"], "doc": x["doc"]}
