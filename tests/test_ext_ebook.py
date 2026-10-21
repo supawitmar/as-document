@@ -112,6 +112,10 @@ class Text(unittest.TestCase):
                             "ได้ทันในระยะเวลาที่กำหนด ภายในวันที่ 29 สิงหาคม 2569")
         self.assertTrue(self.r.body_b()[0].endswith(t))
 
+    def test_proposer_without_prefix(self):
+        for name in ("นายสมชาย ใจดี", "(สมชาย ใจดี)", "น.ส. สมชาย ใจดี"):
+            self.assertEqual(make_request({**VALUES, "proposer": name}).proposer, "สมชาย ใจดี")
+
     def test_cc(self):
         self.assertEqual(self.r.cc_a(), [
             "ประธานหลักสูตรวิศวกรรมศาสตรมหาบัณฑิต สาขาวิชาวิศวกรรมเคมี (หลักสูตรนานาชาติ)",

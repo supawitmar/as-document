@@ -129,7 +129,7 @@ def make_request(values: dict) -> Request:
         head = "ผู้อำนวยการ" if v["faculty"].startswith(HEAD_DIRECTOR) else "คณบดี"
         v["to"] = head + v["faculty"]
     v["advisor"] = full_title(v["advisor"])
-    v["proposer"] = v["proposer"].strip("()")
+    v["proposer"] = re.sub(r"^(?:นางสาว|นาง|นาย|น\.\s*ส\.)\s*", "", v["proposer"].strip("()"))   # ตัวอย่าง B: "(ชื่อ นามสกุล)" ไม่มีคำนำหน้า
     return Request(**v)
 
 
