@@ -134,6 +134,7 @@ def make_request(values: dict) -> Request:
 
 
 def output_stems(r: Request) -> tuple:
-    """ชื่อไฟล์ตามที่เจ้าหน้าที่ใช้ ("ขยายส่งเล่ม <รหัส> <รหัสหลักสูตรไม่มี /> <ชื่อ>") — B ขึ้นต้นด้วย "บันทึกขออนุมัติ" """
-    tail = f"{r.student_id} {r.program_code.replace('/', '')} {r.student}"
+    """"ขยายส่งเล่ม <รหัส> <รหัสหลักสูตร / เป็น -> <ชื่อ>" เช่น "ขยายส่งเล่ม 6512345 EGCH-M นางสาว…" (ผู้ใช้เลือก 21 ต.ค. 2569)
+    — B ขึ้นต้นด้วย "บันทึกขออนุมัติ" """
+    tail = f"{r.student_id} {r.program_code.replace('/', '-')} {r.student}"
     return safe_stem(f"ขยายส่งเล่ม {tail}"), safe_stem(f"บันทึกขออนุมัติขยายส่งเล่ม {tail}")
