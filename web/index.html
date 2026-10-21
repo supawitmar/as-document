@@ -201,6 +201,33 @@ main { display: flex; flex-direction: column; gap: 20px; }
 .chip-btn .k { color: var(--muted); font-weight: 600; }
 
 /* ---------- ช่องกรอกข้อมูลก่อนแปลง (fields) ---------- */
+/* ---------- ทางเข้าแบบฟอร์มกรอกข้อมูล (manifest: form) ---------- */
+.formcard .fbody { padding: 0 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+.formcard .zone { margin: 0; padding: 12px 14px; }
+.fsec h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.fsec .fsd { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+.fgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 14px; }
+.ff { grid-column: span 6; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ff.w-half { grid-column: span 3; }
+.ff.w-third { grid-column: span 2; }
+@media (max-width: 640px) { .ff.w-half, .ff.w-third { grid-column: span 6; } }
+.ff .fl { font-size: 13px; font-weight: 600; }
+.ff .fl i { color: var(--err); font-style: normal; margin-left: 2px; }
+.ff input, .ff select, .ff textarea {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 10px; min-width: 0; width: 100%; color-scheme: light;
+}
+:root[data-theme="dark"] .ff input, :root[data-theme="dark"] .ff select, :root[data-theme="dark"] .ff textarea { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ff input, :root:not([data-theme="light"]) .ff select, :root:not([data-theme="light"]) .ff textarea { color-scheme: dark; } }
+.ff textarea { resize: vertical; min-height: 72px; line-height: 1.55; }
+.ff input:focus, .ff select:focus, .ff textarea:focus { outline: 2px solid var(--c); outline-offset: -1px; border-color: transparent; }
+.ff .fh { font-size: 12px; color: var(--muted); }
+.ff .fe { font-size: 12px; color: var(--err); }
+.ff.err input, .ff.err select, .ff.err textarea { border-color: var(--err); background: var(--err-soft); }
+.ff .fo { margin-top: 6px; }
+.factions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.fresult { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--ok); border-radius: 12px; background: var(--ok-soft); }
+.fresult .actions { flex-wrap: wrap; }
 .enform { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-soft); display: grid; gap: 8px; }
 .enform-h { font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .enrow { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 2px 10px; align-items: center; }
@@ -442,7 +469,7 @@ main { display: flex; flex-direction: column; gap: 20px; }
 // หน้าจอ hub: ไม่มีอะไรผูกกับเอกสารประเภทใด — ทุกอย่างมาจาก manifest ของประเภทเอกสาร (core/doctype.py)
 const TOKEN = "{{TOKEN}}";
 const $ = (id) => document.getElementById(id);
-const state = { items: [], settings: {}, doctypes: [], busy: false, lastOutput: "", downloadsNew: {} };
+const state = { items: [], settings: {}, doctypes: [], busy: false, lastOutput: "", downloadsNew: {}, forms: {} };
 
 // ---------- ชุดไอคอนเดียวทั้งหน้า (เส้น 2px มุมมน) — ประเภทเอกสารเลือกใช้ด้วยชื่อ ----------
 const P = {
@@ -555,7 +582,7 @@ function renderWorkspace() {
   $("tabs").hidden = d.modes.length < 2;
   $("tabs").innerHTML = d.modes.map((m) =>
     `<button class="tab${cls(m.color)}" data-mode="${esc(m.id)}" role="tab">${icon(m.icon || "upload", 18)}${esc(m.label)}</button>`).join("");
-  $("slots").innerHTML = d.slots.map((s) => `
+  $("slots").innerHTML = (d.form ? formCardHtml(d) : "") + d.slots.map((s) => `
     <section class="card slot${cls(s.color)}" data-slot="${esc(s.id)}">
       <div class="slot-head">
         <div class="slot-icon">${icon(s.icon, 24)}${s.num ? `<span class="num">${esc(s.num)}</span>` : ""}</div>
@@ -571,6 +598,7 @@ function renderWorkspace() {
       </div>
       <div class="files" data-files="${esc(s.id)}" hidden></div>
     </section>`).join("");
+  if (d.form) renderFormState();
   const dl = d.downloads;
   $("dlBtn").hidden = !dl;
   if (dl) { $("dlLabel").textContent = dl.label; $("dlBtn").title = dl.title || ""; }
@@ -660,6 +688,180 @@ function rowHtml(it) {
   </div>`;
 }
 
+// ---------- ทางเข้าแบบฟอร์ม: กรอกข้อมูลแล้วสร้างเอกสาร (ไม่มีไฟล์ต้นฉบับ) ----------
+const today = () => { const t = new Date(); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); };
+const formFields = (d = dt()) => ((d.form || {}).sections || []).flatMap((sec) => sec.fields || []);
+function formDefaults(d = dt()) {
+  const mem = ((state.settings.form_memory || {})[d.id]) || {};
+  return Object.fromEntries(formFields(d).map((f) => [f.key,
+    f.remember && mem[f.key] != null && mem[f.key] !== "" ? mem[f.key] : f.default === "today" ? today() : f.default != null ? String(f.default) : ""]));
+}
+function formState(d = dt()) {
+  if (!state.forms[d.id]) state.forms[d.id] = { values: formDefaults(d), check: null, touched: new Set(), tried: false, result: null };
+  return state.forms[d.id];
+}
+// ข้อผิดพลาดฝั่งหน้าจอ (ช่องบังคับ/รูปแบบ) รวมกับผลตรวจของประเภทเอกสาร
+function formErrors(d = dt()) {
+  const fs = formState(d), errs = { ...((fs.check || {}).errors || {}) };
+  for (const f of formFields(d)) {
+    const v = String(fs.values[f.key] ?? "").trim();
+    if (f.required && !v) errs[f.key] = errs[f.key] || "กรุณากรอก";
+    else if (v && f.pattern && !new RegExp(f.pattern).test(v)) errs[f.key] = f.pattern_msg || "รูปแบบไม่ถูกต้อง";
+  }
+  return errs;
+}
+const formReady = (d = dt()) => !!d.form && !Object.keys(formErrors(d)).length && !!formState(d).check;
+function fieldHtml(f, v) {
+  const id = "ff_" + f.key;
+  let input;
+  if (f.type === "textarea") {
+    input = `<textarea id="${id}" data-ff="${esc(f.key)}" rows="${f.rows || 3}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
+  } else if (f.type === "select") {
+    const opts = f.options || [];
+    const other = f.allow_other && v && !opts.includes(v);
+    input = `<select id="${id}" data-ff="${esc(f.key)}"><option value="">— เลือก —</option>`
+      + opts.map((o) => `<option${o === v ? " selected" : ""}>${esc(o)}</option>`).join("")
+      + (f.allow_other ? `<option value="__other__"${other ? " selected" : ""}>อื่น ๆ (พิมพ์เอง)</option>` : "") + `</select>`
+      + (f.allow_other ? `<input class="fo" data-ff-other="${esc(f.key)}" value="${esc(other ? v : "")}" placeholder="พิมพ์เอง"${other ? "" : " hidden"}>` : "");
+  } else {
+    input = `<input id="${id}" data-ff="${esc(f.key)}" type="${f.type === "date" ? "date" : "text"}" value="${esc(v)}" placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
+  }
+  return `<div class="ff w-${esc(f.width || "full")}" data-ffw="${esc(f.key)}"><label class="fl" for="${id}">${esc(f.label)}${f.required ? "<i>*</i>" : ""}</label>${input}`
+    + `${f.hint ? `<span class="fh">${esc(f.hint)}</span>` : ""}<span class="fe" hidden></span></div>`;
+}
+function formCardHtml(d) {
+  const F = d.form, fs = formState(d), pre = F.prefill;
+  return `<section class="card slot formcard${cls(d.color)}" data-form>
+    <div class="slot-head"><div class="slot-icon">${icon(d.icon, 24)}</div>
+      <div><h2>${esc(F.title || d.name)}</h2><p>${esc(F.desc || "กรอกข้อมูลครั้งเดียว ระบบเติมลงเอกสารทุกฉบับให้")}</p></div></div>
+    <div class="fbody">
+      ${pre ? `<div class="zone" data-prefill><span class="zi">${icon("upload", 22)}</span>
+        <div class="zt"><b>${esc(pre.label || "เติมข้อมูลจากไฟล์")}</b><span>${esc(pre.hint || "ลากไฟล์มาวางที่นี่ ระบบจะเติมช่องที่อ่านได้ให้ แล้วแก้ไขต่อได้")}</span></div>
+        <button class="btn btn-outline" data-prefill-pick>${icon("plus", 17)}เลือกไฟล์</button></div>` : ""}
+      <div data-fwarn></div>
+      ${(F.sections || []).map((sec) => `<div class="fsec">${sec.title ? `<h3>${esc(sec.title)}</h3>` : ""}${sec.desc ? `<p class="fsd">${esc(sec.desc)}</p>` : ""}
+        <div class="fgrid">${(sec.fields || []).map((f) => fieldHtml(f, fs.values[f.key] ?? "")).join("")}</div></div>`).join("")}
+      <div class="preview" data-fout hidden></div>
+      <div class="factions">
+        <button class="chip-btn pv" data-fpreview>${icon("eye", 15)}ดูตัวอย่าง</button>
+        <button class="chip-btn" data-fclear>${icon("refresh", 15)}${esc(F.clear_label || "ล้างฟอร์ม")}</button>
+      </div>
+      <div data-fresult></div>
+    </div></section>`;
+}
+// อัปเดตเฉพาะข้อความผิด/คำเตือน/ชื่อไฟล์/ผลลัพธ์ — ไม่วาดช่องกรอกใหม่ (ไม่เสียตำแหน่งเคอร์เซอร์)
+function renderFormState() {
+  const d = dt();
+  if (!d.form || !document.querySelector("[data-form]")) return;
+  const fs = formState(d), errs = formErrors(d);
+  for (const f of formFields(d)) {
+    const w = document.querySelector(`[data-ffw="${CSS.escape(f.key)}"]`);
+    if (!w) continue;
+    const show = errs[f.key] && (fs.tried || fs.touched.has(f.key));
+    w.classList.toggle("err", !!show);
+    const e = w.querySelector(".fe");
+    e.hidden = !show;
+    e.textContent = show ? errs[f.key] : "";
+  }
+  const c = fs.check || {};
+  document.querySelector("[data-fwarn]").innerHTML = (c.warnings || []).map((t) => `<div class="note">${icon("alert", 14)}${esc(t)}</div>`).join("");
+  const outs = c.outputs_preview || [];
+  const fo = document.querySelector("[data-fout]");
+  fo.hidden = !outs.length || !!fs.result;
+  fo.innerHTML = outs.map((o) => `<span>${esc(o.name)}.${o.ext || (fmt() === "both" ? "docx / .pdf" : fmt())}</span>`).join("");
+  const pv = document.querySelector("[data-fpreview]");
+  pv.disabled = state.busy || !formReady(d);
+  pv.title = formReady(d) ? "ดูหน้าตาเอกสารก่อนสร้างไฟล์" : "กรอกข้อมูลให้ครบก่อน";
+  const r = fs.result;
+  let html = "";
+  if (r && r.ok) {
+    html = `<div class="fresult"><b>${icon("check", 15)} สร้างเอกสารแล้ว</b>${(r.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("")}<div class="actions">`
+      + (r.outputs || []).map((o) => {
+        const k = o.label ? `<span class="k">${esc(o.label)}</span>` : "";
+        return (o.docx ? `<button class="chip-btn" data-open="${esc(o.docx)}" title="${esc(o.kind)} (Word)">${icon("word", 15)}${k}Word</button>` : "")
+          + (o.pdf ? `<button class="chip-btn" data-open="${esc(o.pdf)}" title="${esc(o.kind)} (PDF)">${icon("pdf", 15)}${k}PDF</button>` : "");
+      }).join("") + (r.docx ? `<button class="chip-btn" data-reveal="${esc(r.docx)}" title="แสดงในโฟลเดอร์">${icon("folder", 15)}</button>` : "") + `</div></div>`;
+  } else if (r) {
+    html = `<div class="note err">${esc(r.error || "สร้างเอกสารไม่สำเร็จ")}</div>`;
+  }
+  document.querySelector("[data-fresult]").innerHTML = html;
+}
+let formTimer;
+function formChanged(key) {
+  const d = dt(), fs = formState(d);
+  if (key) fs.touched.add(key);
+  fs.result = null;                     // แก้ข้อมูลหลังสร้าง = ต้องสร้างใหม่ (ไฟล์ชื่อเดิมจะถูกเขียนทับ)
+  clearTimeout(formTimer);
+  formTimer = setTimeout(checkForm, 350);
+  renderFormState();
+  renderPanel();
+}
+async function checkForm() {
+  const d = dt();
+  if (!d.form) return;
+  const fs = formState(d), sent = JSON.stringify(fs.values);
+  try {
+    const c = await api("/api/form/check", { doctype: d.id, values: fs.values });
+    if (JSON.stringify(fs.values) !== sent) return;      // ผู้ใช้พิมพ์ต่อแล้ว — รอรอบถัดไป
+    fs.check = c;
+  } catch (e) { fs.check = { ok: false, errors: {}, warnings: ["ตรวจข้อมูลไม่ได้: " + e.message], outputs_preview: [] }; }
+  renderFormState();
+  renderPanel();
+}
+async function prefillForm(req) {
+  const d = dt(), fs = formState(d);
+  try {
+    const r = await req;
+    if (r.error) return toast(r.error, "alert");
+    const keys = Object.keys(r.values || {}).filter((k) => formFields(d).some((f) => f.key === k));
+    if (!keys.length) return toast((r.notes || [])[0] || "ไม่พบข้อมูลที่เติมได้ในไฟล์นี้", "alert");
+    keys.forEach((k) => { fs.values[k] = String(r.values[k] ?? ""); fs.touched.add(k); });
+    fs.result = null;
+    renderWorkspace();
+    renderPanel();
+    checkForm();
+    toast(`เติมข้อมูลให้ ${keys.length} ช่อง — ตรวจทานก่อนสร้างเอกสาร` + ((r.notes || []).length ? ` · ${r.notes[0]}` : ""), "info");
+  } catch (e) { toast(e.message, "alert"); }
+}
+async function convertForm() {
+  const d = dt(), fs = formState(d);
+  fs.tried = true;
+  if (!formReady(d)) { renderFormState(); return toast("กรอกข้อมูลให้ครบ/ถูกต้องก่อน (ช่องที่มีกรอบแดง)", "alert"); }
+  if (state.busy) return;
+  state.busy = true;
+  $("hint").textContent = "กำลังเปิด Microsoft Word สร้างเอกสาร อาจใช้เวลาสักครู่…";
+  renderPanel();
+  try {
+    const { dest, outdir } = state.settings;
+    const r = await api("/api/form/convert", { doctype: d.id, values: fs.values,
+      settings: { format: fmt(), dest, outdir, options: { [d.id]: opts() } } });
+    fs.result = r;
+    if (r.ok) {
+      state.lastOutput = r.docx;
+      try { state.settings = (await api("/api/settings", {})).settings; } catch (_) {}     // ค่าที่จำไว้ (remember)
+      toast("สร้างเอกสารเรียบร้อย", "check");
+      $("hint").textContent = `กดปุ่ม ${FMT_LABEL[fmt()] || "Word"} ในฟอร์มเพื่อเปิดไฟล์`;
+    } else {
+      toast("สร้างเอกสารไม่สำเร็จ", "alert");
+      $("hint").textContent = "ใช้ Microsoft Word ในเครื่องสร้างเอกสาร";
+    }
+  } catch (e) {
+    fs.result = { ok: false, error: e.message };
+    toast("สร้างเอกสารไม่สำเร็จ: " + e.message, "alert");
+  } finally {
+    state.busy = false;
+    renderFormState();
+    renderPanel();
+  }
+}
+function clearForm() {
+  const d = dt();
+  state.forms[d.id] = null;
+  renderWorkspace();
+  renderPanel();
+  checkForm();
+}
+
 function render() {
   for (const s of dt().slots) {
     const list = mine().filter((x) => x.at === s.id);
@@ -717,9 +919,17 @@ function renderPanel() {
   const total = todoNow.length;
   $("runBtn").disabled = state.busy || !total;
   $("runLabel").textContent = state.busy ? "กำลังแปลง…" : total ? `ปรับเอกสาร ${total} ไฟล์` : "ปรับเอกสาร";
+  if (d.form && !d.slots.length) {          // ประเภทที่ใช้ฟอร์มอย่างเดียว: ปุ่มหลัก = สร้างเอกสารจากฟอร์ม
+    const fs = formState(d), miss = Object.keys(formErrors(d)).length, ready = formReady(d);
+    const n = ((fs.check || {}).outputs_preview || []).length;
+    $("sum").innerHTML = `<div class="${ready ? "" : "dim"}"><span class="dot${cls(d.color)}">${icon(d.icon, 15)}</span>ข้อมูลในฟอร์ม<b>${ready ? "ครบแล้ว" : miss ? `ยังขาด/ผิด ${miss} ช่อง` : "กำลังตรวจ…"}</b></div>`
+      + (n ? `<div><span class="dot plain">${icon("file", 15)}</span>เอกสารที่จะได้<b>${n} ฉบับ</b></div>` : "");
+    $("runBtn").disabled = state.busy;
+    $("runLabel").textContent = state.busy ? "กำลังสร้าง…" : (d.form.submit_label || "สร้างเอกสาร");
+  }
   $("progress").classList.toggle("on", state.busy);
   $("folderBtn").hidden = !state.lastOutput;
-  $("clearBtn").hidden = !mine().length || state.busy;
+  $("clearBtn").hidden = (!mine().length && !(d.form && formState(d).result)) || state.busy;
   const n = state.downloadsNew[d.id] || 0;
   $("dlCount").textContent = n;
   $("dlCount").hidden = !n;
@@ -738,7 +948,10 @@ function renderSettings() {
   const folder = s.dest === "folder" && s.outdir;
   $("destSame").classList.toggle("on", !folder);
   $("destFolder").classList.toggle("on", !!folder);
-  $("destPath").innerHTML = folder ? icon("folder", 15) + `<span>${esc(s.outdir)}</span>` : `<span>ไฟล์ที่ลากมาวางจะบันทึกใน Downloads</span>`;
+  const formOnly = !!dt().form && !dt().slots.length;
+  $("destSame").textContent = formOnly ? "Downloads" : "ข้างไฟล์ต้นฉบับ";
+  $("destPath").innerHTML = folder ? icon("folder", 15) + `<span>${esc(s.outdir)}</span>`
+    : `<span>${formOnly ? "เอกสารจากฟอร์มจะบันทึกใน Downloads" : "ไฟล์ที่ลากมาวางจะบันทึกใน Downloads"}</span>`;
 }
 
 async function saveSettings(patch) {
@@ -758,6 +971,7 @@ function switchDoctype(id) {
   state.settings.doctype = id;
   state.lastOutput = "";
   renderWorkspace();
+  if (dt().form && !formState().check) checkForm();
   saveSettings({ doctype: id });
   refreshDownloads();
 }
@@ -789,6 +1003,7 @@ $("dlBtn").onclick = async () => {
   } catch (e) { toast(e.message, "alert"); }
 };
 $("clearBtn").onclick = () => {
+  if (dt().form && !mine().length) return clearForm();
   const ids = mine().map((x) => x.id);
   state.items = state.items.filter((x) => !ids.includes(x.id));
   state.lastOutput = "";
@@ -817,6 +1032,20 @@ main.addEventListener("change", (e) => {
   if (t) saveOptions({ [t.dataset.toggle]: t.checked });
 });
 main.addEventListener("input", (e) => {
+  const ff = e.target.closest("[data-ff], [data-ff-other]");
+  if (ff && dt().form) {
+    const fs = formState(), key = ff.dataset.ff || ff.dataset.ffOther;
+    if (ff.tagName === "SELECT" && ff.value === "__other__") {
+      const o = document.querySelector(`[data-ff-other="${CSS.escape(key)}"]`);
+      o.hidden = false; o.focus();
+      fs.values[key] = o.value;
+    } else if (ff.tagName === "SELECT") {
+      const o = document.querySelector(`[data-ff-other="${CSS.escape(key)}"]`);
+      if (o) o.hidden = true;
+      fs.values[key] = ff.value;
+    } else fs.values[key] = ff.value;
+    return formChanged(key);
+  }
   const inp = e.target.closest("input[data-field]");
   if (!inp) return;
   const it = state.items.find((x) => x.id === inp.dataset.field);
@@ -849,6 +1078,9 @@ main.addEventListener("click", async (e) => {
     } else if (b.dataset.open) await api("/api/open", { path: b.dataset.open });
     else if (b.dataset.reveal) await api("/api/reveal", { path: b.dataset.reveal });
     else if (b.dataset.preview) await openPreview(b.dataset.preview);
+    else if ("fpreview" in b.dataset) await openFormPreview();
+    else if ("fclear" in b.dataset) clearForm();
+    else if ("prefillPick" in b.dataset) await prefillForm(api("/api/form/prefill_pick", { doctype: dt().id }));
   } catch (err) { toast(err.message, "alert"); }
 });
 
@@ -886,7 +1118,7 @@ async function convertItems(todo, format = fmt()) {
     refreshDownloads();
   }
 }
-$("runBtn").onclick = () => convertItems(mine().filter((x) => x.st === "ready" && active(x)));
+$("runBtn").onclick = () => (dt().form && !dt().slots.length ? convertForm() : convertItems(mine().filter((x) => x.st === "ready" && active(x))));
 
 // ---------- ดูตัวอย่างเอกสาร: สร้าง PDF ชั่วคราวด้วย Word แล้วแสดงในหน้าต่างนี้ ----------
 let pvSeq = 0;
@@ -935,6 +1167,30 @@ async function openPreview(id) {
     if (seq === pvSeq) pvMessage(`${icon("alert", 28)}<div>สร้างตัวอย่างไม่สำเร็จ: ${esc(e.message)}</div>`, true);
   }
 }
+async function openFormPreview() {
+  const d = dt(), fs = formState(d);
+  fs.tried = true;
+  if (!formReady(d)) { renderFormState(); return toast("กรอกข้อมูลให้ครบ/ถูกต้องก่อน (ช่องที่มีกรอบแดง)", "alert"); }
+  const seq = ++pvSeq;
+  $("pvHint").textContent = "ตรวจเอกสารแล้วปิดหน้าต่างนี้ กด “" + (d.form.submit_label || "สร้างเอกสาร") + "” เพื่อบันทึก — ใช้ไฟล์ที่สร้างไว้ตอนดูตัวอย่าง ไม่ต้องรอซ้ำ";
+  $("pv").hidden = false;
+  $("pvSub").textContent = d.form.title || d.name;
+  $("pvTabs").hidden = true;
+  $("pvNotes").innerHTML = "";
+  pvMessage(`${SPIN}<div>กำลังสร้างตัวอย่างด้วย Microsoft Word…</div><div style="font-size:12.5px">อาจใช้เวลาสักครู่</div>`);
+  $("pvClose").focus();
+  try {
+    const r = await api("/api/form/preview", { doctype: d.id, values: fs.values, options: opts() });
+    if (seq !== pvSeq) return;
+    if (!r.ok) return pvMessage(`${icon("alert", 28)}<div>${esc(r.error)}</div>`, true);
+    $("pvNotes").innerHTML = (r.notes || []).map((n) => `<div class="note">${icon("info", 14)}${esc(n)}</div>`).join("");
+    $("pvTabs").innerHTML = r.pages.map((p) => `<button data-url="${esc(p.url)}">${icon("file", 15)}${esc(p.label || p.kind)}</button>`).join("");
+    $("pvTabs").hidden = r.pages.length < 2;
+    pvShow(r.pages[0]);
+  } catch (e) {
+    if (seq === pvSeq) pvMessage(`${icon("alert", 28)}<div>สร้างตัวอย่างไม่สำเร็จ: ${esc(e.message)}</div>`, true);
+  }
+}
 $("pvTabs").onclick = (e) => {
   const b = e.target.closest("button[data-url]");
   if (b) pvShow({ url: b.dataset.url });
@@ -947,6 +1203,7 @@ window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("pv").h
 // ---------- drag & drop: วางในช่องไหน เข้าช่องนั้น / วางนอกช่อง จัดตามที่ประเภทเอกสารแนะนำ ----------
 const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
 const zoneOf = (e) => {
+  if (dt().form && (dt().form.prefill) && e.target.closest?.("[data-form]")) return document.querySelector("[data-prefill]");
   const slot = e.target.closest?.(".slot");
   return slot && !slot.classList.contains("off") ? slot.querySelector(".zone") : null;
 };
@@ -970,6 +1227,18 @@ window.addEventListener("drop", async (e) => {
   const zone = zoneOf(e);
   setOver(null);
   if (state.busy || !dt().id) return;
+  if (dt().form && (!dt().slots.length || e.target.closest?.("[data-form]"))) {     // วางบนฟอร์ม = เติมข้อมูลจากไฟล์
+    const pre = dt().form.prefill;
+    if (!pre) return toast("ประเภทเอกสารนี้กรอกข้อมูลในฟอร์ม ไม่ต้องวางไฟล์", "info");
+    const f = [...e.dataTransfer.files].find((x) => (pre.accept || [".pdf"]).includes(ext(x.name)));
+    if (!f) return toast(`รองรับไฟล์ ${(pre.accept || [".pdf"]).join(" ")} สำหรับเติมข้อมูล`, "alert");
+    return prefillForm(fetch(`/api/form/prefill_raw?doctype=${encodeURIComponent(dt().id)}&name=${encodeURIComponent(f.name)}`,
+      { method: "POST", headers: { "X-Token": TOKEN }, body: f }).then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || data.error && !data.values) throw new Error(data.error || res.statusText);
+        return data;
+      }));
+  }
   const offSlot = e.target.closest?.(".slot.off");
   if (offSlot) {
     const s = slotDef(offSlot.dataset.slot);
@@ -1060,6 +1329,7 @@ $("updateBtn").onclick = async () => {
     renderWorkspace();
     render();
     if (init.items.length) addItems(init.items);
+    if (dt().form) checkForm();
   } catch (e) {
     render();
     toast("เชื่อมต่อโปรแกรมไม่ได้: " + e.message, "alert");

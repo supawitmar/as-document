@@ -34,7 +34,8 @@ UPLOADS = Path(tempfile.gettempdir()) / "fixletters_uploads"
 PREVIEWS = Path(tempfile.gettempdir()) / "fixletters_preview"
 TOKEN = secrets.token_urlsafe(16)
 APP_WINDOW_TITLE = "ระบบปรับเอกสาร"   # ต้องตรงกับ <title> ใน web/index.html
-DEFAULT_SETTINGS = {"format": "docx", "dest": "same", "outdir": "", "doctype": "", "options": {}}
+DEFAULT_SETTINGS = {"format": "docx", "dest": "same", "outdir": "", "doctype": "", "options": {},
+                    "form_memory": {}}     # form_memory: ค่าช่องฟอร์มที่ติ๊ก remember {ประเภท: {key: ค่า}}
 FORMATS = ("docx", "pdf", "both")     # รูปแบบไฟล์ที่ส่งออก: Word / PDF / Word + PDF
 
 items = {}          # id -> {"path": Path, "origin": "path"|"upload", "doctype": id}
@@ -208,20 +209,36 @@ def from_preview(doctype: str, job: Job, options: dict, extra: dict, companions:
     c = preview_cache.get(job.id)
     if not c or not c["result"].get("ok") or c["sig"] != preview_sig(doctype, job.id, options, extra, companions):
         return None
+    return copy_cached(c["result"], job.outdir, fmt)
+
+
+def copy_cached(result: dict, outdir: Path, fmt: str):
+    """คัดลอกไฟล์ที่สร้างไว้ตอนดูตัวอย่างไปโฟลเดอร์ปลายทางตามรูปแบบที่เลือก — ไม่ครบ = None (ให้แปลงใหม่)"""
     exts = {"pdf": ["pdf"], "both": ["docx", "pdf"]}.get(fmt, ["docx"])
-    outs = c["result"].get("outputs", [])
+    outs = result.get("outputs", [])
     # ทุกฉบับต้องมีไฟล์ตามรูปแบบที่เลือกอย่างน้อยหนึ่งแบบ (ไฟล์ Word ที่จัดแล้วได้ PDF อย่างเดียว)
     if not outs or not all(any(o.get(e) and Path(o[e]).exists() for e in exts) for o in outs):
         return None
-    job.outdir.mkdir(parents=True, exist_ok=True)
-    copied, notes = [], list(c["result"].get("notes", []))
+    outdir.mkdir(parents=True, exist_ok=True)
+    copied, notes = [], list(result.get("notes", []))
     for o in outs:
         new = {**o, "docx": None, "pdf": None, "doc": None}
         for e in exts:
             if o.get(e) and Path(o[e]).exists():       # ชื่อซ้ำ = เขียนทับ (ฉบับปรับปรุง)
-                new[e] = save_file(Path(o[e]), job.outdir / Path(o[e]).name, notes, move=False)
+                new[e] = save_file(Path(o[e]), outdir / Path(o[e]).name, notes, move=False)
         copied.append(new)
-    return {**c["result"], "outputs": copied, "notes": notes}
+    return {**result, "outputs": copied, "notes": notes}
+
+
+def pack(r: dict) -> dict:
+    """ผลของประเภทเอกสาร -> ผลที่ส่งให้หน้าจอ (path เป็นข้อความ) และอนุญาตให้เปิดไฟล์ที่ได้"""
+    outputs = [{k: str(o.get(k) or "") for k in ("kind", "label", "docx", "pdf", "doc")} for o in r.get("outputs", [])]
+    for o in outputs:
+        for f in (o["docx"], o["pdf"], o["doc"]):
+            if f:
+                allowed.update({Path(f), Path(f).parent})
+    return {"ok": bool(r.get("ok")), "error": r.get("error", ""), "notes": r.get("notes", []), "outputs": outputs,
+            "docx": next((f for o in outputs for f in (o["docx"], o["pdf"]) if f), "")}
 
 
 def convert(doctype: str, ids: list, settings: dict, extra: dict = None, companions=()) -> dict:
@@ -240,15 +257,7 @@ def convert(doctype: str, ids: list, settings: dict, extra: dict = None, compani
             todo.append(j)
     if any(j.id not in comps for j in todo):        # มีหนังสือที่ยังไม่ได้ดูตัวอย่าง (หรือเปลี่ยนตัวเลือกหลังดู) -> แปลงด้วย Word
         results.update(dt.convert(todo, opts, "both" if fmt == "both" else fmt == "pdf", extra, log=lambda m: None))
-    out = {}
-    for jid, r in results.items():
-        outputs = [{k: str(o.get(k) or "") for k in ("kind", "label", "docx", "pdf", "doc")} for o in r.get("outputs", [])]
-        for o in outputs:
-            for f in (o["docx"], o["pdf"], o["doc"]):
-                if f:
-                    allowed.update({Path(f), Path(f).parent})
-        out[jid] = {"ok": bool(r.get("ok")), "error": r.get("error", ""), "notes": r.get("notes", []), "outputs": outputs,
-                    "docx": next((f for o in outputs for f in (o["docx"], o["pdf"]) if f), "")}
+    out = {jid: pack(r) for jid, r in results.items()}
     remember_converted([items[i]["path"] for i, r in out.items() if r["ok"] and items[i]["origin"] == "path"])
     return out
 
@@ -266,16 +275,90 @@ def preview(doctype: str, iid: str, options: dict, extra: dict, companions=()) -
         comp = [Job(c, items[c]["path"], outdir) for c in companions if c in items and c != iid]
         r = dt.preview(Job(iid, items[iid]["path"], outdir), opts, extra or {}, log=lambda m: None, companions=comp)
         preview_cache[iid] = {"sig": preview_sig(doctype, iid, opts, extra, list(companions)), "dir": outdir, "result": r}
-        pages = []
-        for o in r.get("outputs", []):
-            if o.get("pdf") and Path(o["pdf"]).exists():
-                key = uuid.uuid4().hex[:12]
-                preview_files[key] = (iid, Path(o["pdf"]))
-                pages.append({"kind": o.get("kind", ""), "label": o.get("label", ""), "url": f"/preview/{key}/{quote(Path(o['pdf']).name)}"})
+        return preview_pages(iid, r)
+
+
+def preview_pages(owner: str, r: dict) -> dict:
+    """ลิงก์ PDF ตัวอย่างให้หน้าจอแสดง (เปิดได้ระหว่างที่ตัวอย่างยังอยู่ใน preview_cache)"""
+    pages = []
+    for o in r.get("outputs", []):
+        if o.get("pdf") and Path(o["pdf"]).exists():
+            key = uuid.uuid4().hex[:12]
+            preview_files[key] = (owner, Path(o["pdf"]))
+            pages.append({"kind": o.get("kind", ""), "label": o.get("label", ""), "url": f"/preview/{key}/{quote(Path(o['pdf']).name)}"})
     if pages:
         return {"ok": True, "error": "", "notes": r.get("notes", []), "pages": pages}
     return {"ok": False, "error": r.get("error") or "สร้างตัวอย่างไม่ได้ — ต้องใช้ Microsoft Word ในเครื่อง",
             "notes": r.get("notes", []), "pages": []}
+
+
+# ---------- ทางเข้าแบบฟอร์มกรอกข้อมูล (ประเภทเอกสารที่มี ui["form"] เช่น ext_ebook) ----------
+def form_fields(dt) -> list:
+    return [f for sec in (dt.ui.get("form") or {}).get("sections", []) for f in sec.get("fields", [])]
+
+
+def form_sig(doctype: str, values: dict, options: dict) -> str:
+    return json.dumps([doctype, values or {}, options or {}], sort_keys=True, ensure_ascii=False)
+
+
+def form_check(doctype: str, values: dict) -> dict:
+    r = registry.get(doctype).check_form(values or {})
+    return {"ok": bool(r.get("ok")), "errors": r.get("errors") or {}, "warnings": r.get("warnings") or [],
+            "outputs_preview": [p if isinstance(p, dict) else {"name": str(p)} for p in r.get("outputs_preview") or []]}
+
+
+def form_preview(doctype: str, values: dict, options: dict) -> dict:
+    dt = registry.get(doctype)
+    opts = {**load_settings()["options"].get(doctype, {}), **(options or {})}
+    owner = f"form:{doctype}"
+    with preview_lock:
+        drop_preview(owner)
+        outdir = PREVIEWS / f"form-{doctype}" / uuid.uuid4().hex[:8]
+        outdir.mkdir(parents=True, exist_ok=True)
+        r = dt.preview_form(values or {}, opts, outdir, log=lambda m: None)
+        preview_cache[owner] = {"sig": form_sig(doctype, values, opts), "dir": outdir, "result": r}
+        return preview_pages(owner, r)
+
+
+def form_convert(doctype: str, values: dict, settings: dict) -> dict:
+    """สร้างเอกสารจากฟอร์ม — ใช้ไฟล์ตอนดูตัวอย่างถ้าข้อมูล/ตัวเลือกยังเหมือนเดิม ไม่ต้องเปิด Word ซ้ำ"""
+    dt = registry.get(doctype)
+    values = values or {}
+    chosen = Path(settings["outdir"]) if settings.get("dest") == "folder" and settings.get("outdir") else None
+    outdir, fmt = chosen or DOWNLOADS, settings.get("format")
+    opts = settings["options"].get(doctype, {})
+    check = form_check(doctype, values)
+    if check["errors"]:
+        return {"ok": False, "error": "กรอกข้อมูลให้ครบ/ถูกต้องก่อน: " + ", ".join(
+            f.get("label", k) for k in check["errors"] for f in form_fields(dt) if f["key"] == k),
+            "notes": [], "outputs": [], "docx": ""}
+    c = preview_cache.get(f"form:{doctype}")
+    r = None
+    if c and c["result"].get("ok") and c["sig"] == form_sig(doctype, values, opts):
+        r = copy_cached(c["result"], outdir, fmt)
+    if not r:
+        outdir.mkdir(parents=True, exist_ok=True)
+        r = dt.convert_form(values, opts, "both" if fmt == "both" else fmt == "pdf", outdir, log=lambda m: None)
+    out = pack(r)
+    if out["ok"]:
+        remember_form(doctype, values)
+    return out
+
+
+def remember_form(doctype: str, values: dict):
+    """จำค่าช่องที่ประเภทเอกสารกำหนด remember (เช่น ชื่อ/ตำแหน่งผู้เสนอ) ไว้เติมครั้งหน้า — เฉพาะเครื่องนี้"""
+    keep = {f["key"]: values.get(f["key"], "") for f in form_fields(registry.get(doctype)) if f.get("remember")}
+    if keep:
+        s = load_settings()
+        mem = dict(s.get("form_memory") or {})
+        mem[doctype] = {**mem.get(doctype, {}), **keep}
+        s["form_memory"] = mem
+        save_settings(s)
+
+
+def form_prefill(doctype: str, path: Path) -> dict:
+    r = registry.get(doctype).prefill_form(Path(path))
+    return {"values": r.get("values") or {}, "notes": r.get("notes") or [], "error": r.get("error") or ""}
 
 
 def drop_preview(iid: str):
@@ -361,8 +444,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "forbidden"}, 403)
         last_ping[0] = time.time()
         n = int(self.headers.get("Content-Length") or 0)
-        if url.path == "/api/upload_raw":       # ไฟล์ที่ลากมาวาง: รับเป็นไบต์ตรง ๆ เขียนลงดิสก์ทีละส่วน (ไฟล์ใหญ่ไม่กินหน่วยความจำ)
+        if url.path in ("/api/upload_raw", "/api/form/prefill_raw"):   # ไฟล์ที่ลากมาวาง: รับเป็นไบต์ตรง ๆ (ไฟล์ใหญ่ไม่กินหน่วยความจำ)
             try:
+                if url.path == "/api/form/prefill_raw":          # วางไฟล์บนฟอร์ม -> เติมช่องให้อัตโนมัติ (ไม่เพิ่มเป็นรายการ)
+                    doctype = q.get("doctype", [""])[0]
+                    return self._json(form_prefill(doctype, self.save_upload(q, n, doctype)))
                 return self._json(self.upload_raw(q, n))
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
@@ -377,6 +463,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def upload_raw(self, q, n: int) -> dict:
         doctype = q.get("doctype", [""])[0]
+        return {"item": register(self.save_upload(q, n, doctype), "upload", doctype)}
+
+    def save_upload(self, q, n: int, doctype: str) -> Path:
         registry.get(doctype)
         name = Path(q.get("name", ["file"])[0] or "file").name
         d = UPLOADS / uuid.uuid4().hex[:8]
@@ -389,7 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 f.write(chunk)
                 left -= len(chunk)
-        return {"item": register(d / name, "upload", doctype)}
+        return d / name
 
     def route(self, path, data):
         doctype = data.get("doctype") or ""
@@ -440,6 +529,25 @@ class Handler(BaseHTTPRequestHandler):
             with job():
                 return {"results": convert(doctype, data.get("ids", []), s, data.get("extra") or {},
                                            data.get("companions") or [])}
+        if path == "/api/form/check":
+            return form_check(doctype, data.get("values") or {})
+        if path == "/api/form/preview":
+            with job():
+                return form_preview(doctype, data.get("values") or {}, data.get("options") or {})
+        if path == "/api/form/convert":
+            s = load_settings()
+            patch = data.get("settings", {})
+            s.update({k: v for k, v in patch.items() if k in ("format", "dest", "outdir")})
+            for dt_id, o in (patch.get("options") or {}).items():
+                s["options"][dt_id] = {**s["options"].get(dt_id, {}), **o}
+            with job():
+                return form_convert(doctype, data.get("values") or {}, s)
+        if path == "/api/form/prefill_pick":
+            pre = (registry.get(doctype).ui.get("form") or {}).get("prefill") or {}
+            pats = " ".join("*" + e for e in pre.get("accept") or [".pdf"])
+            picked = ask("files", str(DOWNLOADS), {"title": pre.get("label", "เลือกไฟล์"),
+                                                   "filters": [(pre.get("label", "ไฟล์"), pats), ("ทุกไฟล์", "*.*")]})
+            return form_prefill(doctype, picked[0]) if picked else {"values": {}, "notes": [], "error": ""}
         if path in ("/api/open", "/api/reveal"):
             p = Path(data.get("path") or "")
             if not p.exists() or not is_allowed(p):

@@ -33,6 +33,22 @@ hub ไม่รู้จักรายละเอียดของเอก�
 
 preview(job, ...) -> ผลแบบเดียวกับ convert ของ job นั้น โดยต้องมีไฟล์ 'pdf' ให้หน้าจอแสดง
     ค่าเริ่มต้น: convert แบบ pdf="both" ลงโฟลเดอร์ชั่วคราวที่ hub เตรียมให้ (job.outdir)
+
+ทางเข้าแบบ "ฟอร์มกรอกข้อมูล" (ไม่มีไฟล์ต้นฉบับ — เช่น ext_ebook): ใส่ ui["form"] แทน/คู่กับ slots
+    ui["form"] = {
+        'title', 'desc', 'submit_label' (ข้อความปุ่มสร้าง), 'clear_label',
+        'prefill': {'label', 'accept': [".pdf"], 'hint'}      (ไม่บังคับ — วางไฟล์เพื่อเติมช่องให้อัตโนมัติ)
+        'sections': [{'title', 'desc', 'fields': [{
+            'key', 'label', 'type': text|textarea|date|select, 'required', 'options': [...] (select),
+            'allow_other' (select: มีช่อง "อื่น ๆ" ให้พิมพ์เอง), 'pattern' + 'pattern_msg' (regex ฝั่งหน้าจอ),
+            'default': ค่าเริ่มต้น หรือ "today" (วันที่วันนี้), 'remember' (จำค่าล่าสุดต่อเครื่อง — settings.json),
+            'width': full|half|third, 'hint', 'placeholder', 'rows' (textarea)}]}]}
+    ค่าวันที่ที่ hub ส่งให้เป็น ISO "YYYY-MM-DD" เสมอ (ประเภทเอกสารแปลงเป็นวันที่ไทยเอง)
+    check_form(values)   -> {'ok', 'errors': {key: ข้อความ}, 'warnings': [...], 'outputs_preview': [{'name'}]}
+                            hub เรียกระหว่างผู้ใช้กรอก (หน่วงสั้น ๆ) — ต้องเร็ว ไม่เปิด Word
+    convert_form(values, options, pdf, outdir, log) -> ผลแบบ 1 รายการของ convert ({'ok','error','notes','outputs'})
+    preview_form(values, options, outdir, log)      -> เหมือน convert_form แบบ pdf="both" (ค่าเริ่มต้น)
+    prefill_form(path)   -> {'values': {key: ค่า}, 'notes': [...], 'error': ""} — เติมเฉพาะช่องที่อ่านได้
 """
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,7 +77,7 @@ class DocType:
 
     # ---------- hub เรียกใช้ ----------
     def accept_exts(self) -> set:
-        return {e.lower() for s in self.ui["slots"] for e in s.get("accept", [])}
+        return {e.lower() for s in self.ui.get("slots", []) for e in s.get("accept", [])}
 
     def accepts(self, path: Path) -> bool:
         return Path(path).suffix.lower() in self.accept_exts()
@@ -77,7 +93,7 @@ class DocType:
         return {"id": self.id, "name": self.name, "description": self.description, "icon": self.icon,
                 "color": self.color, "options": dict(self.options), "downloads": self.downloads,
                 "drop_hint": self.drop_hint, "max_mb": self.max_mb, "accept": sorted(self.accept_exts()), "pickers": sorted(self.pickers),
-                **self.ui}
+                "modes": [], "slots": [], **self.ui}
 
     # ---------- ประเภทเอกสารต้องเขียน ----------
     def inspect(self, path: Path) -> dict:
@@ -87,6 +103,23 @@ class DocType:
         """jobs: [Job], options: ค่าตัวเลือกของประเภทนี้, extra: {job.id: {field key: ค่าที่ผู้ใช้กรอก}}
         pdf: True = ส่งออกเป็น PDF อย่างเดียว / False = Word (.docx) อย่างเดียว"""
         raise NotImplementedError
+
+    # ---------- ทางเข้าแบบฟอร์ม (เฉพาะประเภทที่มี ui["form"]) ----------
+    def check_form(self, values: dict) -> dict:
+        """ค่าเริ่มต้น: ตรวจช่องบังคับว่าง — ประเภทเอกสารเขียนทับเพื่อตรวจละเอียดและบอกชื่อไฟล์ที่จะได้"""
+        form = self.ui.get("form") or {}
+        errors = {f["key"]: "กรุณากรอก" for sec in form.get("sections", []) for f in sec.get("fields", [])
+                  if f.get("required") and not str(values.get(f["key"], "")).strip()}
+        return {"ok": not errors, "errors": errors, "warnings": [], "outputs_preview": []}
+
+    def convert_form(self, values: dict, options: dict, pdf, outdir: Path, log=print) -> dict:
+        raise NotImplementedError
+
+    def preview_form(self, values: dict, options: dict, outdir: Path, log=print) -> dict:
+        return self.convert_form(values, options, "both", outdir, log=log)
+
+    def prefill_form(self, path: Path) -> dict:
+        return {"values": {}, "notes": [], "error": "ประเภทเอกสารนี้ไม่รองรับการเติมข้อมูลจากไฟล์"}
 
     def preview(self, job: Job, options: dict, extra: dict, log=print, companions=()) -> dict:
         """ตัวอย่างเอกสาร (ปุ่ม "ดูตัวอย่าง"): สร้าง PDF ลง job.outdir ซึ่งเป็นโฟลเดอร์ชั่วคราว
