@@ -132,6 +132,35 @@ class ReleasedOnlyTests(unittest.TestCase):
             self.assertEqual(g.call_count, calls)
         update._cache.update(at=0.0, result=None)
 
+    def test_github_api_used_when_raw_blocked(self):
+        """เครือข่ายที่ทำงานบล็อก raw.githubusercontent.com (HTTP 403) แต่ api.github.com ผ่าน"""
+        import base64
+
+        def content(d):
+            return {"content": base64.b64encode(json.dumps(d).encode()).decode()}
+        new = {"version": "1.4.3", "build": 11, "changes": [{"build": 11, "version": "1.4.3"}]}
+
+        def get(url, timeout):
+            if "raw.githubusercontent.com" in url:
+                raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+            if url.endswith("/tags?per_page=100"):
+                return [{"name": "v1.4.2"}, {"name": "v1.4.3"}, {"name": "v1.10"}, {"name": "test"}]
+            if url.endswith("ref=v1.10"):
+                return content({"version": "1.10", "build": 12})
+            if url.endswith("ref=v1.4.3"):
+                return content(new)
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        with mock.patch.object(update, "_get_json", side_effect=get):
+            self.assertEqual(update.latest_release(10)["version"], "1.10")      # 1.10 ใหม่กว่า 1.4.3
+            self.assertIsNone(update.latest_release(12))
+
+    def test_both_sources_fail_reports_both(self):
+        def get(url, timeout):
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        with mock.patch.object(update, "_get_json", side_effect=get):
+            with self.assertRaisesRegex(RuntimeError, "GitHub API"):
+                update.latest_release(5)
+
     def test_dev_checkout_never_offers_update(self):
         head = {"changes": [{"build": 6, "version": "1.3"}]}
         with self.fake_github(head, {"1.3": {"version": "1.3", "build": 6}}), \

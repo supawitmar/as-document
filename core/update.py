@@ -24,11 +24,13 @@ ZIP ของป้ายนั้น ไม่ใช่ของ branch main �
 ไฟล์ที่รุ่นก่อนหน้าติดตั้งแต่รุ่นใหม่ไม่มีแล้ว จะถูกลบ (เฉพาะไฟล์ที่อยู่ในรายการติดตั้งของรุ่นก่อน)
 เครื่องพัฒนา (มีโฟลเดอร์ .git) ไม่อัปเดตด้วยวิธีนี้ — ใช้ git pull
 """
+import base64
 import datetime as dt
 import fnmatch
 import hashlib
 import json
 import os
+import re
 import shutil
 import ssl
 import subprocess
@@ -52,6 +54,9 @@ LOCAL_ONLY = ["settings.json", "converted.json", "translations.json", "*/transla
 DATA_FILES = ["doctypes/*/data/*.json"]
 CHECK_TTL = 30 * 60                      # จำผลเช็กอัปเดต 30 นาที (ไม่ถาม GitHub ทุกครั้งที่เปิดหน้า)
 _cache = {"at": 0.0, "result": None}
+
+
+API = f"https://api.github.com/repos/{REPO}"
 
 
 def raw_url(path: str, ref: str = BRANCH) -> str:
@@ -149,9 +154,44 @@ def is_dev_checkout() -> bool:
     return (BASE / ".git").exists()
 
 
+def _tag_key(name: str):
+    m = re.match(r"^v(\d+(?:\.\d+)*)$", name)
+    return tuple(int(x) for x in m.group(1).split(".")) + (0,) * 3 if m else None
+
+
+def _latest_from_api(cur_build: int, timeout: float):
+    """ถามรายการป้ายจาก GitHub API (api.github.com) แบบเดียวกับระบบตรวจเล่ม แล้วอ่าน version.json ของป้ายใหม่สุด"""
+    data = _get_json(f"{API}/tags?per_page=100", timeout)
+    tags = sorted((t["name"] for t in data if isinstance(t, dict) and _tag_key(str(t.get("name", "")))),
+                  key=_tag_key, reverse=True)
+    for tag in tags[:5]:
+        try:
+            got = _get_json(f"{API}/contents/version.json?ref={tag}", timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:                  # ป้ายก่อนมี version.json
+                continue
+            raise
+        v = json.loads(base64.b64decode(got["content"]).decode("utf-8"))
+        return v if int(v.get("build", 0)) > cur_build else None
+    return None
+
+
 def latest_release(cur_build: int, timeout: float = 6):
     """รุ่นล่าสุดที่ "ออกแล้ว" (มีป้าย v<เลข> บน GitHub) และใหม่กว่า cur_build — ไม่มี = None
-    ดูรายการรุ่นจาก version.json ของ main แล้วยืนยันว่ามีป้ายจริงด้วย version.json ของป้ายนั้น
+    ถาม GitHub API ก่อน ไม่ได้ (เช่นเกินโควตา 60 ครั้ง/ชม.) ค่อยอ่าน raw.githubusercontent.com — เครือข่ายที่ทำงาน
+    ตรวจ/บล็อก raw.githubusercontent.com (Python: ใบรับรองไม่ผ่าน, curl: HTTP 403 — 22 ต.ค. 2569)
+    แต่ api.github.com และ github.com ผ่าน (ระบบตรวจเล่มที่ใช้ API จึงขึ้นแถบอัปเดตได้)"""
+    try:
+        return _latest_from_api(cur_build, timeout)
+    except Exception as api_error:
+        try:
+            return _latest_from_raw(cur_build, timeout)
+        except Exception as e:
+            raise RuntimeError(f"{e} · GitHub API: {api_error}") from e
+
+
+def _latest_from_raw(cur_build: int, timeout: float):
+    """ดูรายการรุ่นจาก version.json ของ main แล้วยืนยันว่ามีป้ายจริงด้วย version.json ของป้ายนั้น
     (รุ่นที่ commit แล้วแต่ยังไม่ push ป้าย = ยังไม่ออก ข้ามไปดูรุ่นก่อนหน้า)"""
     head = _get_json(raw_url("version.json") + f"?t={int(time.time() // CHECK_TTL)}", timeout)
     cands = [c for c in head.get("changes", []) if int(c.get("build", 0)) > cur_build and c.get("version")]
