@@ -17,7 +17,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from core import ASSETS
+from core import ASSETS, NO_WINDOW
 
 LOGO_URL = "https://graduate.mahidol.ac.th/prof/admin/pic/logo_mu1.jpg"
 LOGO_FILE = ASSETS / "logo_mu1.jpg"
@@ -43,7 +43,7 @@ def word_convert(jobs: list) -> dict:
     r = subprocess.run(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
          str(ASSETS / "to_docx.ps1"), "-Jobs", str(jf)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace")
+        capture_output=True, text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
     results = {}
     for ln in r.stdout.splitlines():
         if ln.startswith(("OK\t", "ERR\t")):

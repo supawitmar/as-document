@@ -40,7 +40,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from core import BASE
+from core import BASE, NO_WINDOW
 
 REPO = "supawitmar/as-document"
 BRANCH = "main"
@@ -90,7 +90,7 @@ def _fetch_windows(url: str, timeout: float) -> bytes:
             base = [str(curl), "-sL", "--max-time", str(int(timeout)), "-A", HEADERS["User-Agent"],
                     "-o", str(out), "-w", "%{http_code}"]
             for extra in (["--ssl-revoke-best-effort"], []):       # curl รุ่นเก่าของ Windows ไม่รู้จักตัวเลือกนี้
-                r = subprocess.run(base + extra + [url], capture_output=True, text=True, timeout=timeout + 15)
+                r = subprocess.run(base + extra + [url], capture_output=True, text=True, timeout=timeout + 15, **NO_WINDOW)
                 code = r.stdout.strip()[-3:]
                 if r.returncode == 0 and code == "200":
                     return out.read_bytes()
@@ -106,7 +106,7 @@ def _fetch_windows(url: str, timeout: float) -> bytes:
               "Write-Output $c; exit 1 }")
         env = {**os.environ, "DOC_URL": url, "DOC_OUT": str(out), "DOC_UA": HEADERS["User-Agent"], "DOC_T": str(int(timeout))}
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
-                           text=True, env=env, timeout=timeout + 30)
+                           text=True, env=env, timeout=timeout + 30, **NO_WINDOW)
         if r.returncode == 0 and out.exists():
             return out.read_bytes()
         code = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
@@ -274,7 +274,7 @@ def apply_tree(src: Path, dest: Path = BASE, log=print, source: str = "") -> dic
     if req.exists() and _sha(req) != req_before:
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--upgrade", "--disable-pip-version-check",
                             "--no-warn-script-location",
-                            "-q", "-r", str(req)], capture_output=True, text=True)
+                            "-q", "-r", str(req)], capture_output=True, text=True, **NO_WINDOW)
         pip = "" if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
     log(f"อัปเดต {len(changed)} ไฟล์, รวมข้อมูล {len(merged)} ไฟล์, ลบ {len(removed)} ไฟล์")
     return {"changed": changed, "merged": merged, "removed": removed, "pip_error": pip}
@@ -310,7 +310,7 @@ def install_with_new(tree: Path, dest: Path = BASE, source: str = "") -> dict:
     """ติดตั้งด้วยตัวอัปเดตของรุ่นใหม่ (python -m core.update --tree ในโฟลเดอร์รุ่นใหม่) — ตัวติดตั้งรุ่นเก่า
     ไม่ต้องรู้จักไฟล์/กฎใหม่ของรุ่นถัดไป"""
     r = subprocess.run([sys.executable, "-X", "utf8", "-m", "core.update", "--tree", str(tree), "--dest", str(dest),
-                        "--source", source, "--json"], cwd=str(tree), capture_output=True, text=True, encoding="utf-8")
+                        "--source", source, "--json"], cwd=str(tree), capture_output=True, text=True, encoding="utf-8", **NO_WINDOW)
     line = next((ln for ln in reversed(r.stdout.splitlines()) if ln.startswith("{")), "")
     if r.returncode or not line:
         raise RuntimeError((r.stderr or r.stdout).strip()[-400:] or "ตัวอัปเดตของรุ่นใหม่ทำงานไม่สำเร็จ")

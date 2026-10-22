@@ -191,6 +191,29 @@ class CorporateCertTests(unittest.TestCase):
         self.assertEqual(cm.exception.code, 404)
 
 
+class NoConsoleWindowTests(unittest.TestCase):
+    """โปรแกรมย่อยที่หน้าโปรแกรมเรียก (Word ผ่าน PowerShell, curl) ต้องไม่เปิดจอดำขึ้นแว้บ (ผู้ใช้แจ้ง 22 ต.ค. 2569)"""
+
+    def test_word_convert_and_windows_fetch_hide_console(self):
+        import os
+        from core import render
+        if os.name != "nt":
+            self.skipTest("Windows only")
+        flags = []
+        def fake(*a, **k):
+            flags.append(k.get("creationflags"))
+            return subprocess.CompletedProcess(a[0], 0, stdout="404", stderr="")
+        with mock.patch.object(render.subprocess, "run", side_effect=fake):
+            with self.assertRaises(RuntimeError):           # ไม่มีบรรทัด OK/ERR -> ถือว่าเรียก Word ไม่ได้
+                render.word_convert([{"in": str(Path(tempfile.gettempdir()) / "x.htm")}])
+        with mock.patch.object(update.subprocess, "run", side_effect=fake), \
+                mock.patch.object(update.Path, "exists", return_value=True):
+            with self.assertRaises(urllib.error.HTTPError):
+                update._fetch_windows("https://example.invalid/x", 5)
+        self.assertTrue(flags)
+        self.assertTrue(all(f == subprocess.CREATE_NO_WINDOW for f in flags), flags)
+
+
 class InstallWithNewUpdaterTests(unittest.TestCase):
     """ติดตั้งด้วยตัวอัปเดตของรุ่นใหม่จริง (โฟลเดอร์ที่คัดลอกจาก repo นี้)"""
 
