@@ -28,7 +28,9 @@ import datetime as dt
 import fnmatch
 import hashlib
 import json
+import os
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -70,13 +72,62 @@ def zip_url(version: str) -> str:
 HEADERS = {"User-Agent": "as-document-updater (+https://github.com/supawitmar/as-document)"}
 
 
-def _open(url: str, timeout: float):
-    return urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout)
+def _is_cert_error(e: Exception) -> bool:
+    """เครือข่ายองค์กรที่ตรวจการเชื่อมต่อเข้ารหัสด้วยใบรับรองขององค์กร — Python ไม่รู้จักใบรับรองนั้น แต่ Windows รู้จัก"""
+    reason = getattr(e, "reason", e)
+    return isinstance(reason, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+
+def _fetch_windows(url: str, timeout: float) -> bytes:
+    """ดาวน์โหลดด้วยเครื่องมือของ Windows ที่ตรวจใบรับรองแบบเดียวกับเบราว์เซอร์ (curl.exe ของ Windows ใช้ Schannel,
+    สำรองด้วย PowerShell) — ใช้เมื่อ Python ตรวจใบรับรองไม่ผ่าน (พบที่เครื่องที่ทำงาน 22 ต.ค. 2569:
+    "CERTIFICATE_VERIFY_FAILED unable to get local issuer certificate" ทั้งที่เบราว์เซอร์ใช้เน็ตได้)
+    ได้สถานะ 404 -> HTTPError 404 (ให้ latest_release รู้ว่ายังไม่มีป้าย)"""
+    with tempfile.TemporaryDirectory(prefix="docfetch_") as t:
+        out = Path(t) / "body"
+        curl = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "curl.exe"
+        if curl.exists():
+            base = [str(curl), "-sL", "--max-time", str(int(timeout)), "-A", HEADERS["User-Agent"],
+                    "-o", str(out), "-w", "%{http_code}"]
+            for extra in (["--ssl-revoke-best-effort"], []):       # curl รุ่นเก่าของ Windows ไม่รู้จักตัวเลือกนี้
+                r = subprocess.run(base + extra + [url], capture_output=True, text=True, timeout=timeout + 15)
+                code = r.stdout.strip()[-3:]
+                if r.returncode == 0 and code == "200":
+                    return out.read_bytes()
+                if r.returncode == 0 and code.isdigit():
+                    raise urllib.error.HTTPError(url, int(code), f"HTTP {code}", {}, None)
+                if r.returncode != 2:                                 # 2 = ไม่รู้จักตัวเลือก -> ลองแบบไม่มี
+                    break
+        ps = ("$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = "
+              "[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; "
+              "try { Invoke-WebRequest -UseBasicParsing -Uri $env:DOC_URL -OutFile $env:DOC_OUT "
+              "-UserAgent $env:DOC_UA -TimeoutSec $env:DOC_T; exit 0 } "
+              "catch { $c = 0; if ($_.Exception.Response) { $c = [int]$_.Exception.Response.StatusCode }; "
+              "Write-Output $c; exit 1 }")
+        env = {**os.environ, "DOC_URL": url, "DOC_OUT": str(out), "DOC_UA": HEADERS["User-Agent"], "DOC_T": str(int(timeout))}
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
+                           text=True, env=env, timeout=timeout + 30)
+        if r.returncode == 0 and out.exists():
+            return out.read_bytes()
+        code = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+        if code.isdigit() and int(code) >= 400:
+            raise urllib.error.HTTPError(url, int(code), f"HTTP {code}", {}, None)
+        raise RuntimeError("ดาวน์โหลดไม่สำเร็จทั้งผ่าน Python และเครื่องมือของ Windows: " + (r.stderr or r.stdout).strip()[-200:])
+
+
+def _fetch(url: str, timeout: float) -> bytes:
+    """ดาวน์โหลด url — ใช้ Python ก่อน ถ้าใบรับรองขององค์กรทำให้ไม่ผ่าน ใช้เครื่องมือของ Windows แทน"""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout) as r:
+            return r.read()
+    except Exception as e:
+        if not _is_cert_error(e):
+            raise
+        return _fetch_windows(url, timeout)
 
 
 def _get_json(url: str, timeout: float):
-    with _open(url, timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    return json.loads(_fetch(url, timeout).decode("utf-8"))
 
 
 def version_label(build: int, version: str = "") -> str:
@@ -243,8 +294,7 @@ def fetch(workdir: Path, zip_path: Path = None, log=print) -> Path:
             raise RuntimeError(f"เป็นรุ่นล่าสุดที่ออกแล้ว (version {read_version()['version']})")
         expect = version_label(int(rel.get("build", 0)), rel.get("version", ""))
         log(f"กำลังดาวน์โหลด version {expect}…")
-        with _open(zip_url(expect), 120) as r:
-            z.write_bytes(r.read())
+        z.write_bytes(_fetch(zip_url(expect), 120))
     with zipfile.ZipFile(z) as zf:
         zf.extractall(workdir / "x")
     roots = [p for p in (workdir / "x").iterdir() if p.is_dir()]

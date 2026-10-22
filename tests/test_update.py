@@ -160,6 +160,37 @@ class UserAgentTests(unittest.TestCase):
         self.assertTrue(seen and seen[0].startswith("as-document-updater"))
 
 
+class CorporateCertTests(unittest.TestCase):
+    """เครือข่ายที่ทำงานตรวจ SSL ด้วยใบรับรององค์กร: Python ไม่ผ่าน -> ใช้เครื่องมือของ Windows (curl.exe / PowerShell)"""
+
+    @staticmethod
+    def cert_fail(*a, **k):
+        import ssl
+        raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"))
+
+    def test_cert_error_uses_windows_download(self):
+        with mock.patch.object(update.urllib.request, "urlopen", side_effect=self.cert_fail), \
+                mock.patch.object(update, "_fetch_windows", return_value=b'{"build": 9}') as win:
+            self.assertEqual(update._get_json("https://example.invalid/v.json", 5), {"build": 9})
+            win.assert_called_once()
+
+    def test_other_errors_do_not_fall_back(self):
+        boom = urllib.error.URLError(OSError("network unreachable"))
+        with mock.patch.object(update.urllib.request, "urlopen", side_effect=boom), \
+                mock.patch.object(update, "_fetch_windows") as win:
+            with self.assertRaises(urllib.error.URLError):
+                update._fetch("https://example.invalid/x", 5)
+            win.assert_not_called()
+
+    def test_curl_404_becomes_http_error(self):
+        done = subprocess.CompletedProcess([], 0, stdout="404", stderr="")
+        with mock.patch.object(update.subprocess, "run", return_value=done), \
+                mock.patch.object(update.Path, "exists", return_value=True):
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                update._fetch_windows("https://example.invalid/v9.9.9/version.json", 5)
+        self.assertEqual(cm.exception.code, 404)
+
+
 class InstallWithNewUpdaterTests(unittest.TestCase):
     """ติดตั้งด้วยตัวอัปเดตของรุ่นใหม่จริง (โฟลเดอร์ที่คัดลอกจาก repo นี้)"""
 
