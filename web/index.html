@@ -1274,8 +1274,12 @@ $("themeBtn").onclick = () => {
   try { localStorage.setItem("theme", dark ? "light" : "dark"); } catch (_) {}
 };
 
-// ---------- อัปเดต (patch): เช็ก GitHub ตอนเปิดโปรแกรม — ไม่มีอินเทอร์เน็ตก็ใช้งานได้ตามปกติ ----------
+// ---------- อัปเดต (patch): เช็ก GitHub ตอนเปิดโปรแกรม และทุก 30 นาทีระหว่างเปิดค้าง — ไม่มีอินเทอร์เน็ตก็ใช้งานได้ตามปกติ ----------
+const UPDATE_EVERY = 30 * 60 * 1000;          // เซิร์ฟเวอร์จำผลไว้ 30 นาทีเท่ากัน (core.update.CHECK_TTL)
+let lastUpdateCheck = 0, updating = false;
 async function checkUpdate() {
+  if (updating) return;                        // กำลังอัปเดต/อัปเดตเสร็จแล้ว — ไม่เขียนทับข้อความบนแถบ
+  lastUpdateCheck = Date.now();
   try {
     const u = await api("/api/update/check", {});
     if (!u.available && u.error && !u.dev) {      // เช็กไม่ได้ — บอกให้รู้ แทนการเงียบ (เคยทำให้เครื่องที่ทำงานไม่รู้ว่ามีรุ่นใหม่)
@@ -1285,7 +1289,8 @@ async function checkUpdate() {
       $("updateBar").hidden = false;
       return;
     }
-    if (!u.available) return;
+    if (!u.available) { $("updateBar").hidden = true; return; }     // เช็กได้แล้วและเป็นรุ่นล่าสุด — ซ่อนแถบที่เคยขึ้น
+    $("updateBtn").hidden = false;
     $("updateTitle").textContent = `มีอัปเดตใหม่: version ${u.latest_version} (ตอนนี้ใช้ ${u.version}) — กดอัปเดตแล้วโปรแกรมจะเปิดใหม่เอง`;
     $("updateNotes").innerHTML = u.changes.slice(0, 3).flatMap((c) => (c.items && c.items.length ? c.items : [c.text]))
       .slice(0, 8).map((t) => `<li>${esc(t)}</li>`).join("");
@@ -1295,6 +1300,7 @@ async function checkUpdate() {
 $("updateBtn").onclick = async () => {
   if (state.busy) return toast("รอให้แปลงไฟล์เสร็จก่อน", "info");
   const b = $("updateBtn");
+  updating = true;
   b.disabled = true;
   b.lastChild.textContent = "กำลังอัปเดต…";
   try {
@@ -1306,6 +1312,7 @@ $("updateBtn").onclick = async () => {
     b.hidden = true;
     if (r.relaunch) setTimeout(() => window.close(), 4000);
   } catch (e) {
+    updating = false;
     b.disabled = false;
     b.lastChild.textContent = "อัปเดตเลย";
     toast("อัปเดตไม่สำเร็จ: " + e.message, "alert");
@@ -1340,6 +1347,9 @@ $("updateBtn").onclick = async () => {
   setInterval(() => api("/api/ping", {}).catch(() => {}), 5000);
   window.addEventListener("focus", refreshDownloads);
   checkUpdate();
+  // เปิดโปรแกรมค้างไว้ทั้งวันก็เห็นรุ่นใหม่เอง: เช็กซ้ำทุก 30 นาที และเมื่อกลับมาที่หน้าต่างหลังห่างไปนาน
+  setInterval(checkUpdate, UPDATE_EVERY);
+  window.addEventListener("focus", () => { if (Date.now() - lastUpdateCheck > UPDATE_EVERY) checkUpdate(); });
 })();
 </script>
 </body>
