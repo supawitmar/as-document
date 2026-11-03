@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 import app  # noqa: E402
 from core import registry  # noqa: E402
-from core.doctype import DocType  # noqa: E402
+from core.doctype import DocType, field_shown  # noqa: E402
 
 
 class FakeForm(DocType):
@@ -83,6 +83,19 @@ class HubFormTests(unittest.TestCase):
         r = app.form_check(self.dt.id, {"name": "สมชาย ใจดี"})
         self.assertTrue(r["ok"])
         self.assertEqual(r["outputs_preview"][0]["name"], "เอกสาร สมชาย ใจดี")
+
+    def test_show_if_hides_required_field(self):
+        """ช่องที่ show_if ซ่อนอยู่ไม่ถูกบังคับกรอก (หน้าจอใช้ fieldShown แบบเดียวกัน)"""
+        f = {"key": "pay", "required": True, "show_if": {"mode": ["ลดหย่อน", "ผ่อนชำระ"]}}
+        self.assertTrue(field_shown(f, {"mode": "ลดหย่อน"}))
+        self.assertFalse(field_shown(f, {"mode": "ยกเว้น"}))
+        self.assertFalse(field_shown(f, {}))
+        self.assertTrue(field_shown({"key": "x", "show_if": {"mode": "ยกเว้น"}}, {"mode": "ยกเว้น"}))
+        self.assertTrue(field_shown({"key": "x"}, {}))
+        sec = self.dt.ui["form"]["sections"][0]["fields"]
+        with mock.patch.dict(sec[0], {"show_if": {"staff": "เปิด"}}):
+            self.assertTrue(app.form_check(self.dt.id, {"name": "", "staff": ""})["ok"])
+            self.assertIn("name", app.form_check(self.dt.id, {"name": "", "staff": "เปิด"})["errors"])
 
     def test_convert_refuses_incomplete_form(self):
         r = app.form_convert(self.dt.id, {"name": ""}, self.settings())

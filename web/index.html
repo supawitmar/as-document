@@ -691,6 +691,14 @@ function rowHtml(it) {
 // ---------- ทางเข้าแบบฟอร์ม: กรอกข้อมูลแล้วสร้างเอกสาร (ไม่มีไฟล์ต้นฉบับ) ----------
 const today = () => { const t = new Date(); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); };
 const formFields = (d = dt()) => ((d.form || {}).sections || []).flatMap((sec) => sec.fields || []);
+// show_if: {ช่อง: ค่า หรือ [ค่า]} — แสดงช่องนี้เมื่อทุกช่องที่ระบุมีค่าตรง (core.doctype.field_shown ทำแบบเดียวกัน)
+const fieldShown = (f, values) => !f.show_if || Object.entries(f.show_if).every(([k, want]) =>
+  [].concat(want).map(String).includes(String(values[k] ?? "")));
+// ค่าที่ส่งให้ประเภทเอกสาร: ช่องที่ซ่อนอยู่ส่งเป็นค่าว่าง (ค่าที่พิมพ์ไว้ยังอยู่ในฟอร์ม ถ้าเปลี่ยนตัวเลือกกลับมาก็ไม่หาย)
+function formSent(d = dt()) {
+  const fs = formState(d);
+  return Object.fromEntries(formFields(d).map((f) => [f.key, fieldShown(f, fs.values) ? fs.values[f.key] ?? "" : ""]));
+}
 function formDefaults(d = dt()) {
   // ลำดับ: ค่าที่จำไว้ (remember) > ค่าเริ่มต้นที่ประเภทเอกสารคำนวณให้ (manifest: form_defaults) > default ของช่อง
   const mem = ((state.settings.form_memory || {})[d.id]) || {}, pre = d.form_defaults || {};
@@ -707,6 +715,7 @@ function formState(d = dt()) {
 function formErrors(d = dt()) {
   const fs = formState(d), errs = { ...((fs.check || {}).errors || {}) };
   for (const f of formFields(d)) {
+    if (!fieldShown(f, fs.values)) { delete errs[f.key]; continue; }
     const v = String(fs.values[f.key] ?? "").trim();
     if (f.required && !v) errs[f.key] = errs[f.key] || "กรุณากรอก";
     else if (v && f.pattern && !new RegExp(f.pattern).test(v)) errs[f.key] = f.pattern_msg || "รูปแบบไม่ถูกต้อง";
@@ -714,7 +723,7 @@ function formErrors(d = dt()) {
   return errs;
 }
 const formReady = (d = dt()) => !!d.form && !Object.keys(formErrors(d)).length && !!formState(d).check;
-function fieldHtml(f, v) {
+function fieldHtml(f, v, shown = true) {
   const id = "ff_" + f.key;
   let input;
   if (f.type === "textarea") {
@@ -729,7 +738,7 @@ function fieldHtml(f, v) {
   } else {
     input = `<input id="${id}" data-ff="${esc(f.key)}" type="${f.type === "date" ? "date" : "text"}" value="${esc(v)}" placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
   }
-  return `<div class="ff w-${esc(f.width || "full")}" data-ffw="${esc(f.key)}"><label class="fl" for="${id}">${esc(f.label)}${f.required ? "<i>*</i>" : ""}</label>${input}`
+  return `<div class="ff w-${esc(f.width || "full")}" data-ffw="${esc(f.key)}"${shown ? "" : " hidden"}><label class="fl" for="${id}">${esc(f.label)}${f.required ? "<i>*</i>" : ""}</label>${input}`
     + `${f.hint ? `<span class="fh">${esc(f.hint)}</span>` : ""}<span class="fe" hidden></span></div>`;
 }
 function formCardHtml(d) {
@@ -743,7 +752,7 @@ function formCardHtml(d) {
         <button class="btn btn-outline" data-prefill-pick>${icon("plus", 17)}เลือกไฟล์</button></div>` : ""}
       <div data-fwarn></div>
       ${(F.sections || []).map((sec) => `<div class="fsec">${sec.title ? `<h3>${esc(sec.title)}</h3>` : ""}${sec.desc ? `<p class="fsd">${esc(sec.desc)}</p>` : ""}
-        <div class="fgrid">${(sec.fields || []).map((f) => fieldHtml(f, fs.values[f.key] ?? "")).join("")}</div></div>`).join("")}
+        <div class="fgrid">${(sec.fields || []).map((f) => fieldHtml(f, fs.values[f.key] ?? "", fieldShown(f, fs.values))).join("")}</div></div>`).join("")}
       <div class="preview" data-fout hidden></div>
       <div class="factions">
         <button class="chip-btn pv" data-fpreview>${icon("eye", 15)}ดูตัวอย่าง</button>
@@ -760,6 +769,7 @@ function renderFormState() {
   for (const f of formFields(d)) {
     const w = document.querySelector(`[data-ffw="${CSS.escape(f.key)}"]`);
     if (!w) continue;
+    w.hidden = !fieldShown(f, fs.values);
     const show = errs[f.key] && (fs.tried || fs.touched.has(f.key));
     w.classList.toggle("err", !!show);
     const e = w.querySelector(".fe");
@@ -802,10 +812,10 @@ function formChanged(key) {
 async function checkForm() {
   const d = dt();
   if (!d.form) return;
-  const fs = formState(d), sent = JSON.stringify(fs.values);
+  const values = formSent(d), sent = JSON.stringify(values), fs = formState(d);
   try {
-    const c = await api("/api/form/check", { doctype: d.id, values: fs.values });
-    if (JSON.stringify(fs.values) !== sent) return;      // ผู้ใช้พิมพ์ต่อแล้ว — รอรอบถัดไป
+    const c = await api("/api/form/check", { doctype: d.id, values });
+    if (JSON.stringify(formSent(d)) !== sent) return;      // ผู้ใช้พิมพ์ต่อแล้ว — รอรอบถัดไป
     fs.check = c;
   } catch (e) { fs.check = { ok: false, errors: {}, warnings: ["ตรวจข้อมูลไม่ได้: " + e.message], outputs_preview: [] }; }
   renderFormState();
@@ -836,7 +846,7 @@ async function convertForm() {
   renderPanel();
   try {
     const { dest, outdir } = state.settings;
-    const r = await api("/api/form/convert", { doctype: d.id, values: fs.values,
+    const r = await api("/api/form/convert", { doctype: d.id, values: formSent(d),
       settings: { format: fmt(), dest, outdir, options: { [d.id]: opts() } } });
     fs.result = r;
     if (r.ok) {
@@ -1183,7 +1193,7 @@ async function openFormPreview() {
   pvMessage(`${SPIN}<div>กำลังสร้างตัวอย่างด้วย Microsoft Word…</div><div style="font-size:12.5px">อาจใช้เวลาสักครู่</div>`);
   $("pvClose").focus();
   try {
-    const r = await api("/api/form/preview", { doctype: d.id, values: fs.values, options: opts() });
+    const r = await api("/api/form/preview", { doctype: d.id, values: formSent(d), options: opts() });
     if (seq !== pvSeq) return;
     if (!r.ok) return pvMessage(`${icon("alert", 28)}<div>${esc(r.error)}</div>`, true);
     $("pvNotes").innerHTML = (r.notes || []).map((n) => `<div class="note">${icon("info", 14)}${esc(n)}</div>`).join("");

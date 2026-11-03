@@ -42,7 +42,8 @@ preview(job, ...) -> ผลแบบเดียวกับ convert ของ j
             'key', 'label', 'type': text|textarea|date|select, 'required', 'options': [...] (select),
             'allow_other' (select: มีช่อง "อื่น ๆ" ให้พิมพ์เอง), 'pattern' + 'pattern_msg' (regex ฝั่งหน้าจอ),
             'default': ค่าเริ่มต้น หรือ "today" (วันที่วันนี้), 'remember' (จำค่าล่าสุดต่อเครื่อง — settings.json),
-            'width': full|half|third, 'hint', 'placeholder', 'rows' (textarea)}]}]}
+            'width': full|half|third, 'hint', 'placeholder', 'rows' (textarea),
+            'show_if': {key: ค่า | [ค่า]} (แสดงเมื่อทุกช่องที่ระบุมีค่าตรง — ช่องที่ซ่อนอยู่ hub ไม่ตรวจและส่งเป็น "")}]}]}
     ค่าวันที่ที่ hub ส่งให้เป็น ISO "YYYY-MM-DD" เสมอ (ประเภทเอกสารแปลงเป็นวันที่ไทยเอง)
     check_form(values)   -> {'ok', 'errors': {key: ข้อความ}, 'warnings': [...], 'outputs_preview': [{'name'}]}
                             hub เรียกระหว่างผู้ใช้กรอก (หน่วงสั้น ๆ) — ต้องเร็ว ไม่เปิด Word
@@ -59,6 +60,13 @@ class Job:
     id: str           # รหัสรายการในหน้าจอ
     path: Path        # ไฟล์ต้นฉบับ
     outdir: Path      # โฟลเดอร์ปลายทาง (hub เลือกให้ตามตัวเลือก "บันทึกไฟล์ที่")
+
+
+def field_shown(field: dict, values: dict) -> bool:
+    """ช่องฟอร์มแสดงอยู่ไหม ตาม show_if {key: ค่า | [ค่า]} (ทุกช่องที่ระบุต้องตรง) — ตรงกับ fieldShown ใน web/index.html"""
+    cond = field.get("show_if") or {}
+    return all(str(values.get(k) or "") in [str(x) for x in (w if isinstance(w, (list, tuple)) else [w])]
+               for k, w in cond.items())
 
 
 class DocType:
@@ -106,10 +114,10 @@ class DocType:
 
     # ---------- ทางเข้าแบบฟอร์ม (เฉพาะประเภทที่มี ui["form"]) ----------
     def check_form(self, values: dict) -> dict:
-        """ค่าเริ่มต้น: ตรวจช่องบังคับว่าง — ประเภทเอกสารเขียนทับเพื่อตรวจละเอียดและบอกชื่อไฟล์ที่จะได้"""
+        """ค่าเริ่มต้น: ตรวจช่องบังคับว่าง (ข้ามช่องที่ show_if ซ่อนอยู่) — ประเภทเอกสารเขียนทับเพื่อตรวจละเอียดและบอกชื่อไฟล์ที่จะได้"""
         form = self.ui.get("form") or {}
         errors = {f["key"]: "กรุณากรอก" for sec in form.get("sections", []) for f in sec.get("fields", [])
-                  if f.get("required") and not str(values.get(f["key"], "")).strip()}
+                  if f.get("required") and field_shown(f, values) and not str(values.get(f["key"], "")).strip()}
         return {"ok": not errors, "errors": errors, "warnings": [], "outputs_preview": []}
 
     def convert_form(self, values: dict, options: dict, pdf, outdir: Path, log=print) -> dict:
