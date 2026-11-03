@@ -18,9 +18,12 @@ TAB = "tab-stops:2.0cm"
 INDENT = ("<span style='mso-spacerun:yes'> </span>"
           "<span style='mso-tab-count:1'>               </span>")
 SIGN_CENTER = 0.75     # แกนกลางของบล็อกลายมือชื่อ (สัดส่วนจากขอบซ้ายของพื้นที่พิมพ์) ตามไฟล์ตัวอย่าง
-# บรรทัด เรียน/Dear ที่ยาวเกิน 1 บรรทัด: บรรทัดต่อไปเยื้องเข้า 8 เว้นวรรค (27.7pt ≈ 1 ซม. วัดจาก PDF ที่ Word สร้าง)
-# ตามไฟล์ตัวอย่าง (ปรับ) 19 ต.ค. 2569
+# บรรทัด เรียน/Dear ที่ยาวเกิน 1 บรรทัด: บรรทัดต่อไปเยื้องเข้า
+#   อังกฤษ 27.7pt = 8 เว้นวรรค (≈ 1 ซม.) ตามไฟล์ตัวอย่าง (ปรับ) 19 ต.ค. 2569 (วัดจาก PDF ที่ Word สร้าง)
+#   ไทย 24.6pt = ความกว้าง "เรียน " (TH Sarabun New 16pt) ให้ตรงกับข้อความหลังคำว่า เรียน — เจ้าของเลือก 3 พ.ย. 2569
+#   ค่าคงที่ใช้ได้เพราะบรรทัดนี้มาถึงเสมอเป็น "เรียน" + เว้นวรรค 1 ช่อง (ทุกทางอ่านผ่าน clean() ซึ่งยุบช่องว่างซ้ำ)
 TO_HANG = "margin-left:27.7pt;text-indent:-27.7pt;"
+TO_HANG_TH = "margin-left:24.6pt;text-indent:-24.6pt;"
 
 DOC_TYPES = {
     # ย่อหน้าว่างหลังคำลงท้าย, ย่อหน้าว่างท้ายเอกสาร, ระยะห่างตัวอักษรของย่อหน้าแรกหลังตาราง
@@ -110,7 +113,7 @@ def build_html(L: Letter, logo_src: str) -> str:
     if L.address:
         out.append(para(lines_html(L.address), align="right", line_height=False))
     out.append(para(lines_html(["", h.get("ref", ""), h.get("date", ""), h.get("subject", "")])))
-    out += [para("&nbsp;"), para(esc(h.get("to", "")) or "&nbsp;", style=TO_HANG)]
+    out += [para("&nbsp;"), para(esc(clean(h.get("to", ""))) or "&nbsp;", style=TO_HANG_TH)]
     for p in L.body:
         out.append(para("<br>\n" + INDENT + esc(p), justify="thai"))
 
