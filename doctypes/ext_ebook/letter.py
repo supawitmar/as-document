@@ -11,9 +11,11 @@
 import re
 from dataclasses import dataclass
 
+from core.student_profile import faculty_name, full_title, head_of, strip_prefix
 from core.text import clean, safe_stem
+from core.thaidate import parse_date, thai_date
 
-from .form import FIELDS, parse_date, thai_date
+from .form import FIELDS
 
 KIND_A = "หนังสือแจ้งผลขยายเวลาส่งรูปเล่ม"
 KIND_B = "บันทึกข้อความขออนุมัติขยายเวลา"
@@ -24,30 +26,6 @@ REASON_TAIL = "ทำให้ไม่สามารถดำเนินก�
 CLOSING_A = "จึงเรียนมาเพื่อโปรดทราบ และกรุณาแจ้งให้นักศึกษาได้รับทราบ จักขอบคุณยิ่ง"
 CLOSING_B = "จึงเรียนมาเพื่อโปรดพิจารณา"
 APPROVE = "อนุมัติ"
-
-# ตำแหน่งทางวิชาการแบบย่อ -> เต็ม (ตัวอย่างเขียนเต็ม: "ผู้ช่วยศาสตราจารย์ ดร. ...")
-ACADEMIC = [(r"ผศ\.\s*", "ผู้ช่วยศาสตราจารย์ "), (r"รศ\.\s*", "รองศาสตราจารย์ "), (r"(?<![ก-๙])ศ\.\s*", "ศาสตราจารย์ ")]
-HEAD_DIRECTOR = ("สถาบัน", "ศูนย์")          # ส่วนงานที่หัวหน้าเป็น "ผู้อำนวยการ" (ที่เหลือ "คณบดี")
-UNIT_PREFIX = ("คณะ", "สถาบัน", "วิทยาลัย", "ศูนย์", "โครงการ", "บัณฑิตวิทยาลัย")
-
-
-def full_title(name: str) -> str:
-    """ผศ.ดร.สมชาย -> ผู้ช่วยศาสตราจารย์ ดร. สมชาย"""
-    s = clean(name)
-    for pat, rep in ACADEMIC:
-        s = re.sub(pat, rep, s)
-    return clean(re.sub(r"ดร\.\s*", "ดร. ", s))
-
-
-def faculty_name(s: str) -> str:
-    s = clean(s)
-    return s if not s or s.startswith(UNIT_PREFIX) else "คณะ" + s
-
-
-def strip_prefix(s: str, prefix: str) -> str:
-    s = clean(s)
-    return clean(s[len(prefix):]) if s.startswith(prefix) else s
-
 
 @dataclass
 class Request:
@@ -125,9 +103,7 @@ def make_request(values: dict) -> Request:
     v["major"] = strip_prefix(v["major"], "สาขาวิชา")
     v["program_type"] = v["program_type"].strip("()")
     v["faculty"] = faculty_name(v["faculty"])
-    if not v["to"] and v["faculty"]:
-        head = "ผู้อำนวยการ" if v["faculty"].startswith(HEAD_DIRECTOR) else "คณบดี"
-        v["to"] = head + v["faculty"]
+    v["to"] = v["to"] or head_of(v["faculty"])
     v["advisor"] = full_title(v["advisor"])
     v["proposer"] = re.sub(r"^(?:นางสาว|นาง|นาย|น\.\s*ส\.)\s*", "", v["proposer"].strip("()"))   # ตัวอย่าง B: "(ชื่อ นามสกุล)" ไม่มีคำนำหน้า
     return Request(**v)

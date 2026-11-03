@@ -4,16 +4,14 @@
 
 FORM คือสเปกหน้าจอที่ส่งให้ hub ใน manifest (ui["form"]) — ความหมายของแต่ละคีย์ดูที่
 โน้ต "ext_ebook-hub-form-spec.md" ที่ส่งให้ผู้ดูแล hub (type / required / pattern / default / remember / width)
-ช่อง date: hub ส่งค่าเป็น ISO YYYY-MM-DD (ค.ศ.) — parse_date() รับวันที่ไทยแบบพิมพ์เองได้ด้วย
+ช่อง date: hub ส่งค่าเป็น ISO YYYY-MM-DD (ค.ศ.) — core.thaidate.parse_date รับวันที่ไทยแบบพิมพ์เองได้ด้วย
 """
 import datetime as dt
 import re
 
 from core.text import clean
+from core.thaidate import parse_date, thai_date
 
-MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-          "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
-MONTHS_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
 PROGRAM_TYPES = ["หลักสูตรนานาชาติ", "ภาคปกติ", "ภาคพิเศษ"]
 
 
@@ -66,43 +64,6 @@ FORM = {
 
 FIELDS = {f["key"]: f for s in FORM["sections"] for f in s["fields"]}
 DATE_KEYS = [k for k, f in FIELDS.items() if f["type"] == "date"]
-
-
-def parse_date(s) -> "dt.date | None":
-    """ค่าวันที่จากฟอร์ม -> date (ปี ค.ศ.)
-    รับ ISO "2026-05-11" (ปี > 2400 ถือเป็น พ.ศ.), "11 พฤษภาคม 2569", "11 พ.ค. 69", "11/5/2569" — อ่านไม่ได้ = None"""
-    if isinstance(s, dt.date):
-        return s
-    s = clean(str(s or ""))
-    if not s:
-        return None
-    m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
-    if m:
-        y, mo, d = int(m[1]), int(m[2]), int(m[3])
-    else:
-        m = re.fullmatch(r"(\d{1,2})\s*(?:[/.\-]\s*(\d{1,2})\s*[/.\-]|\s+([ก-๙.\s]+?)\s*)\s*(\d{2,4})", s)
-        if not m:
-            return None
-        d, y = int(m[1]), int(m[4])
-        if m[2]:
-            mo = int(m[2])
-        else:
-            name = m[3].replace(" ", "")
-            mo = next((i + 1 for i, (full, short) in enumerate(zip(MONTHS, MONTHS_SHORT))
-                       if name in (full, short, short.replace(".", ""))), 0)
-        if y < 100:
-            y += 2500                      # "69" = พ.ศ. 2569
-    if y > 2400:
-        y -= 543
-    try:
-        return dt.date(y, mo, d)
-    except ValueError:
-        return None
-
-
-def thai_date(d: dt.date) -> str:
-    """11 พฤษภาคม 2569"""
-    return f"{d.day} {MONTHS[d.month - 1]} {d.year + 543}"
 
 
 def defaults(today: dt.date = None) -> dict:

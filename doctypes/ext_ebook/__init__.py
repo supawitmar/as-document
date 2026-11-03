@@ -7,7 +7,6 @@
     B บันทึกข้อความ งานบริการการศึกษา -> รองคณบดีฝ่ายแผนฯ เพื่อขออนุมัติ (มีเหตุผล + ช่องอนุมัติ)
 
     form.py     ช่องกรอก + ตรวจค่า + วันที่ไทย
-    profile.py  เติมฟอร์มจาก PDF หน้า Student Profile (ระบบฐานข้อมูลนักศึกษา)
     letter.py   แบบจำลองคำขอ + ข้อความของทั้ง 2 ฉบับ + ชื่อไฟล์
     layout.py   รูปแบบหน้ากระดาษ A / B ตามตัวอย่างที่เจ้าหน้าที่จัด
     data/       signers.json (ผู้ลงนาม A = ผู้อนุมัติ B), office.json (ที่อยู่, เลขที่หนังสือ, ส่วนราชการ, เรียน ของ B)
@@ -20,10 +19,11 @@ hub เรียก check_form / convert_form / preview_form / prefill_form (ส
 from pathlib import Path
 
 from core import render
+from core import student_profile as profile   # เติมฟอร์มจาก PDF หน้า Student Profile
 from core.doctype import DocType
 from core.store import JsonFile
 
-from . import form, layout, profile
+from . import form, layout
 from .letter import KIND_A, KIND_B, make_request, output_stems
 
 DATA = Path(__file__).resolve().parent / "data"
