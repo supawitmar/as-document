@@ -8,6 +8,8 @@
     core.store     ไฟล์ข้อมูล JSON ของแต่ละประเภทเอกสาร (ย้ายจากที่เก็บเดิมให้อัตโนมัติ)
     core.doctype   คลาสฐาน DocType — สัญญาที่ประเภทเอกสารทุกตัวต้องทำตาม
     core.registry  ค้นหาประเภทเอกสารทั้งหมดในโฟลเดอร์ doctypes/
+    core.thaidate  วันที่ไทย พ.ศ. + จำนวนเงิน/ตัวหนังสือ (ประเภทแบบฟอร์ม)
+    core.student_profile  เติมฟอร์มจาก PDF หน้า Student Profile + ตัวจัดชื่อคน/ส่วนงาน
 """
 import os
 import subprocess
