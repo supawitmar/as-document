@@ -45,9 +45,27 @@ class Check(unittest.TestCase):
         self.assertIn("pay", form.check({**VALUES, "pay": "100,000"})[0])
         self.assertIn("pay", form.check({**VALUES, "pay": "0"})[0])              # 0 บาท = ยกเว้น
         self.assertNotIn("pay", form.check({**VALUES, "pay": "92,599.50"})[0])
-        errors, warnings = form.check({**WAIVE, "pay": "18,520"})                # ยกเว้น: ไม่บังคับ แต่เตือนว่าไม่ใช้
-        self.assertNotIn("pay", errors)
-        self.assertTrue(any("ไม่ใช้ยอด" in w for w in warnings))
+        # ยกเว้น/ยังไม่เลือก: ช่องถูกซ่อน (show_if) — ไม่บังคับ ไม่ตรวจ และค่าที่ค้างไว้ไม่ถูกใช้
+        for v in ({**WAIVE, "pay": "abc"}, {**VALUES, "mode": "", "pay": "abc"}):
+            self.assertNotIn("pay", form.check(v)[0])
+        self.assertEqual(form.check({**WAIVE, "pay": "18,520"}), ({}, []))
+        self.assertEqual(make_request({**WAIVE, "pay": "18,520"}).pay, "")
+
+    def test_pay_field_shown_only_for_reduce(self):
+        from core.doctype import field_shown
+        f = form.FIELDS["pay"]
+        self.assertEqual(f["show_if"], {"mode": "ลดหย่อน"})
+        self.assertTrue(f["required"])                                           # ดาวแดงตอนลดหย่อน
+        self.assertNotIn("เฉพาะลดหย่อน", f["label"])
+        self.assertTrue(field_shown(f, VALUES))
+        self.assertFalse(field_shown(f, WAIVE))
+        self.assertFalse(field_shown(f, {"mode": ""}))
+        # ค่าเริ่มต้นของ DocType.check_form (ข้ามช่องที่ซ่อน) ให้ผลเรื่องช่องบังคับตรงกับ form.check
+        from core.doctype import DocType
+        base = DocType()
+        base.ui = DOCTYPE.ui
+        self.assertNotIn("pay", base.check_form(WAIVE)["errors"])
+        self.assertIn("pay", base.check_form({**VALUES, "pay": ""})["errors"])
 
     def test_date_order(self):
         _, warnings = form.check({**VALUES, "submit_date": "2024-01-01"})

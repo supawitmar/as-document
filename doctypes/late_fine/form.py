@@ -5,11 +5,12 @@
 FORM คือสเปกหน้าจอที่ส่งให้ hub ใน manifest (ui["form"]) — ความหมายของแต่ละคีย์ดูที่ core/doctype.py
 ช่องนักศึกษาใช้ชื่อเดียวกับ ext_ebook และ core.student_profile จึงเติมจาก Student Profile ได้ตรง ๆ
 ช่องเงินรับ "18,520" / "18520.50" / "18,520 บาท" — ระบบเขียนจำนวนเงินเป็นตัวหนังสือเอง (core.thaidate.baht_text)
-hub ไม่มีช่องที่ซ่อน/แสดงตามตัวเลือก: "ยอดที่ต้องชำระ" แสดงเสมอ แต่บังคับ/ใช้เฉพาะเมื่อเลือก "ลดหย่อน"
+"ยอดที่ต้องชำระ" แสดงและบังคับเฉพาะเมื่อเลือก "ลดหย่อน" (show_if — ช่องที่ซ่อนอยู่ถือเป็นค่าว่าง แบบเดียวกับ hub)
 """
 import datetime as dt
 import re
 
+from core.doctype import field_shown
 from core.text import clean
 from core.thaidate import money, parse_date, parse_money, thai_date
 
@@ -61,7 +62,7 @@ FORM = {
             _f("fine", "ค่าปรับเต็ม (บาท)", placeholder="92,600", width="third",
                pattern=r"^\s*[\d,]+(\.\d{1,2})?\s*(บาท)?\s*$", pattern_msg="จำนวนเงิน เช่น 92,600",
                hint="กรอกตามที่หลักสูตรแจ้ง ระบบไม่คำนวณให้"),
-            _f("pay", "ยอดที่ต้องชำระ (เฉพาะลดหย่อน)", required=False, placeholder="18,520", width="third",
+            _f("pay", "ยอดที่ต้องชำระ (บาท)", placeholder="18,520", width="third", show_if={"mode": REDUCE},
                pattern=r"^\s*[\d,]+(\.\d{1,2})?\s*(บาท)?\s*$", pattern_msg="จำนวนเงิน เช่น 18,520",
                hint="ต้องน้อยกว่าค่าปรับเต็ม — ระบบเขียนจำนวนเงินเป็นตัวหนังสือให้"),
             _f("reason", "เหตุผล (บันทึกข้อความ)", "textarea", rows=3,
@@ -99,7 +100,11 @@ def check(values: dict) -> tuple:
     """ตรวจค่าที่กรอก -> (errors {key: ข้อความ}, warnings [ข้อความ]) — errors ว่าง = สร้างเอกสารได้"""
     errors, warnings = {}, []
     v = {k: clean(str(values.get(k) or "")) for k in FIELDS}
+    shown = {k for k, f in FIELDS.items() if field_shown(f, v)}
+    v = {k: x if k in shown else "" for k, x in v.items()}          # ช่องที่ซ่อนอยู่ = ไม่ได้กรอก ไม่บังคับ ไม่ตรวจ
     for k, f in FIELDS.items():
+        if k not in shown:
+            continue
         if not v[k]:
             if f["required"]:
                 errors[k] = "ต้องกรอก"
@@ -115,15 +120,11 @@ def check(values: dict) -> tuple:
     if v["mode"] and v["mode"] not in (WAIVE, REDUCE):
         errors["mode"] = f"เลือก “{WAIVE}” หรือ “{REDUCE}”"
     fine, pay = parse_money(v["fine"]), parse_money(v["pay"])
-    if v["mode"] == REDUCE and "pay" not in errors:
-        if not v["pay"]:
-            errors["pay"] = "ลดหย่อนต้องกรอกยอดที่ต้องชำระ"
-        elif fine is not None and pay >= fine:
+    if v["mode"] == REDUCE and "pay" not in errors:          # ว่าง = "ต้องกรอก" จากลูปด้านบนแล้ว
+        if fine is not None and pay >= fine:
             errors["pay"] = f"ต้องน้อยกว่าค่าปรับเต็ม ({money(fine)} บาท)"
         elif pay == 0:
             errors["pay"] = f"ยอด 0 บาท = ไม่ต้องชำระ ให้เลือก “{WAIVE}”"
-    if v["mode"] == WAIVE and v["pay"]:
-        warnings.append("เลือก “ยกเว้น” — ไม่ใช้ยอดที่ต้องชำระ (ยกเว้น = ไม่ต้องชำระค่าปรับ)")
     if fine == 0:
         errors["fine"] = "ค่าปรับต้องมากกว่า 0"
     d = {k: parse_date(v[k]) for k in DATE_KEYS}
